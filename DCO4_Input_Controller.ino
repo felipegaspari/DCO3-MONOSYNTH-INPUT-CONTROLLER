@@ -2,12 +2,14 @@
 #include "Arduino.h"
 //#include <Adafruit_TinyUSB.h>
 
-#define NUM_VOICES 4
-#define NUM_OSCILLATORS NUM_VOICES * 2
+#define NUM_VOICES 1
+#define NUM_OSCILLATORS 3
 
 int8_t OSC1Interval = 24;
 int8_t OSC2Interval = 24;
+int8_t OSC3Interval = 24;
 int16_t OSC2Detune = 0;
+int16_t OSC3Detune = 0;
 float DETUNE1;
 float DETUNE2;
 uint16_t PW;

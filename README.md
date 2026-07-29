@@ -79,15 +79,18 @@ Mux select GP18–21; analog SIG GP27; digital SIG GP2/16/17. Full map: [`docs/P
 | `ENABLE_SERIAL` | on | USB debug |
 | `ENABLE_SERIAL1` | on | Screen UART |
 | `ENABLE_SERIAL2` | on | Mainboard UART |
-| `NUM_VOICES` | 4 | Array sizing |
+| `NUM_VOICES` | **1** | Array sizing (monosynth) |
+| `NUM_OSCILLATORS` | **3** | Cal offset array / stage → osc index |
 
 No float/fixed engine forks (no `ENGINE_OPTIONS.md`).
+
+OSC3 ParamIds **33–35** and ADSR3→osc **0–4** match DCO. Encoder: enc3 action3 = OSC3 interval; enc5 action3 = OSC3 detune; enc5 alt3 = LFO2→OSC3.
 
 ---
 
 ## Contributing / hacking
 
 - Start with [`docs/REFERENCE_AI.md`](docs/REFERENCE_AI.md) and [`docs/FILE_INDEX.md`](docs/FILE_INDEX.md).
-- Keep ParamIds aligned with Mainboard `params_def.h`.
+- Keep ParamIds aligned with DCO `params_def.h` (hub default; Mainboard archived).
 - When adding continuous controls, respect manual flags + `serial_send_manual_controls`.
 - When extending presets, update both `loadPreset` and `writePreset` layouts.

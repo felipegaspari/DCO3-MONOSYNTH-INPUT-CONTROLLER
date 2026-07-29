@@ -501,7 +501,7 @@ void read_encoder_buttons() {
       case TG_ADSR3_TO_OSC_SELECT:
         if (buttonActionIsSelected) {
           ADSR3ToOscSelect++;
-          if (ADSR3ToOscSelect > 2) {
+          if (ADSR3ToOscSelect > 4) {
             ADSR3ToOscSelect = 0;
           }
         }

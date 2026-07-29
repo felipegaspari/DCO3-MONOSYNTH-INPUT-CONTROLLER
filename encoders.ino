@@ -215,6 +215,18 @@ void read_encoders() {
         //serial_send_OSC2IntervalFlag = true;
         break;
 
+      case ACTION_OSC3_interval:
+        if (encoderActionIsSelected) {
+          if (direction == DIR_CW) {
+            OSC3Interval = OSC3Interval + 1;
+          } else {
+            OSC3Interval = OSC3Interval - 1;
+          }
+          OSC3Interval = constrain(OSC3Interval, 0, 60);
+        }
+        serial_send_param_change_byte(ParamId::PARAM_OSC3_INTERVAL, (uint8_t)OSC3Interval);
+        break;
+
       case ACTION_OSC2_detune:
         if (encoderActionIsSelected) {
           if (direction == DIR_CW) {
@@ -227,6 +239,18 @@ void read_encoders() {
         serial_send_param_change(ParamId::PARAM_OSC2_DETUNE_VAL, (uint16_t)OSC2Detune);
         break;
 
+      case ACTION_OSC3_detune:
+        if (encoderActionIsSelected) {
+          if (direction == DIR_CW) {
+            OSC3Detune = OSC3Detune + (1 + (1 * speed));
+          } else {
+            OSC3Detune = OSC3Detune - (1 + (1 * speed));
+          }
+          OSC3Detune = constrain(OSC3Detune, 0, 512);
+        }
+        serial_send_param_change(ParamId::PARAM_OSC3_DETUNE_VAL, (uint16_t)OSC3Detune);
+        break;
+
       case ACTION_LFO2_to_OSC2:
         if (encoderActionIsSelected) {
           if (direction == DIR_CW) {
@@ -237,6 +261,18 @@ void read_encoders() {
           LFO2toOSC2DETUNE = constrain(LFO2toOSC2DETUNE, 0, 255);
         }
         serial_send_param_change_byte(ParamId::PARAM_LFO2_TO_DETUNE2, (uint8_t)LFO2toOSC2DETUNE);
+        break;
+
+      case ACTION_LFO2_to_OSC3:
+        if (encoderActionIsSelected) {
+          if (direction == DIR_CW) {
+            LFO2toOSC3DETUNE = LFO2toOSC3DETUNE + (1 + (0.5 * speed));
+          } else {
+            LFO2toOSC3DETUNE = LFO2toOSC3DETUNE - (1 + (0.5 * speed));
+          }
+          LFO2toOSC3DETUNE = constrain(LFO2toOSC3DETUNE, 0, 255);
+        }
+        serial_send_param_change_byte(ParamId::PARAM_LFO2_TO_DETUNE3, (uint8_t)LFO2toOSC3DETUNE);
         break;
 
       case ACTION_osc_sync_mode:
@@ -463,7 +499,7 @@ void read_encoders() {
           } else {
             manualCalibrationStage = manualCalibrationStage - 1;
           }
-          manualCalibrationStage = constrain(manualCalibrationStage, 0, 15);
+          manualCalibrationStage = constrain(manualCalibrationStage, 0, 5);  // 3 oscs × 2 (SAW+pulse)
           uint8_t index = (uint8_t)manualCalibrationStage / 2;
           // Notify mainboard/DCO of the new manual calibration stage + its
           // per-oscillator offset so the DCO uses the correct value.

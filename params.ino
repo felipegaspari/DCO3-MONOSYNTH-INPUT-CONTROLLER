@@ -37,6 +37,13 @@
           break;
         case 2:
           paramName = " ADSR3 TO BOTH";
+          break;
+        case 3:
+          paramName = " ADSR3 TO OSC3";
+          break;
+        case 4:
+          paramName = " ADSR3 TO ALL";
+          break;
       }
       break;
     case 11:
@@ -59,6 +66,17 @@
       break;
     case 16:
       paramName = " LFO2->OSC2 Pitch";
+      break;
+    case 33:
+      paramName = " OSC3 Interval";
+      paramValue -= 24;
+      break;
+    case 34:
+      paramName = " OSC3 Detune";
+      paramValue -= 127;
+      break;
+    case 35:
+      paramName = " LFO2->OSC3 Pitch";
       break;
     case 17:
       paramName = " OscPhaseSync";

@@ -142,6 +142,8 @@ void loadPreset(uint16_t presetN) {
   voiceMode = (int8_t)flashData[12];
 
   ADSR3ToOscSelect = (int8_t)flashData[13];
+  if (ADSR3ToOscSelect < 0) ADSR3ToOscSelect = 0;
+  if (ADSR3ToOscSelect > 4) ADSR3ToOscSelect = 4;
   velocityToVCF = (int8_t)flashData[14];
   velocityToVCA = (int8_t)flashData[15];
 
@@ -154,7 +156,7 @@ void loadPreset(uint16_t presetN) {
   analogDriftSpeed = (int16_t)flashData[22];
   analogDriftSpread = (int16_t)flashData[23];
   syncMode = flashData[24];
-  unused_data = flashData[25];
+  OSC3Interval = (int8_t)flashData[25];
   unused_data = flashData[26];
   unused_data = flashData[27];
   unused_data = flashData[28];
@@ -172,9 +174,9 @@ void loadPreset(uint16_t presetN) {
   ADSR3toPWM = (int16_t)word(flashData[46], flashData[47]);
   ADSR3toDETUNE1 = (int16_t)word(flashData[48], flashData[49]);
 
-  unused_data_uint16_t = word(flashData[50], flashData[51]);
-  unused_data_uint16_t = word(flashData[52], flashData[53]);
-  unused_data_uint16_t = word(flashData[54], flashData[55]);
+  unused_data_uint16_t = word(flashData[50], flashData[51]);  // reserved
+  OSC3Detune = (int16_t)word(flashData[52], flashData[53]);
+  LFO2toOSC3DETUNE = (int16_t)word(flashData[54], flashData[55]);
   unused_data_uint16_t = word(flashData[56], flashData[57]);
   unused_data_uint16_t = word(flashData[58], flashData[59]);
   unused_data_uint16_t = word(flashData[60], flashData[61]);
@@ -272,6 +274,7 @@ delay(2);
 
   serial_send_param_change_byte(ParamId::PARAM_OSC1_INTERVAL,   (uint8_t)OSC1Interval,   false);
   serial_send_param_change_byte(ParamId::PARAM_OSC2_INTERVAL,   (uint8_t)OSC2Interval,   false);
+  serial_send_param_change_byte(ParamId::PARAM_OSC3_INTERVAL,   (uint8_t)OSC3Interval,   false);
 
   serial_send_param_change_byte(ParamId::PARAM_OSC_SYNC_MODE,   (uint8_t)oscSyncMode,    false);
 
@@ -318,8 +321,9 @@ delay(2);
   serial_send_param_change(ParamId::PARAM_ADSR3_TO_DETUNE1, (uint16_t)ADSR3toDETUNE1,   false);
 
   serial_send_param_change(ParamId::PARAM_OSC2_DETUNE_VAL,  (uint16_t)OSC2Detune,       false);
-
+  serial_send_param_change(ParamId::PARAM_OSC3_DETUNE_VAL,  (uint16_t)OSC3Detune,       false);
   serial_send_param_change(ParamId::PARAM_LFO2_TO_DETUNE2,  (uint16_t)LFO2toOSC2DETUNE, false);
+  serial_send_param_change_byte(ParamId::PARAM_LFO2_TO_DETUNE3, (uint8_t)LFO2toOSC3DETUNE, false);
 delay(2);
   serial_send_manual_controls(true);  
   
@@ -481,7 +485,7 @@ void writePreset(uint16_t presetN) {
   flashData[22] = (byte)analogDriftSpeed;
   flashData[23] = (byte)analogDriftSpread;
   flashData[24] = (byte)syncMode;
-  flashData[25] = 0;
+  flashData[25] = (byte)OSC3Interval;
   flashData[26] = 0;
   flashData[27] = 0;
   flashData[28] = 0;
@@ -509,10 +513,10 @@ void writePreset(uint16_t presetN) {
   flashData[49] = lowByte(ADSR3toDETUNE1);
   flashData[50] = 0;
   flashData[51] = 0;
-  flashData[52] = 0;
-  flashData[53] = 0;
-  flashData[54] = 0;
-  flashData[55] = 0;
+  flashData[52] = highByte(OSC3Detune);
+  flashData[53] = lowByte(OSC3Detune);
+  flashData[54] = highByte(LFO2toOSC3DETUNE);
+  flashData[55] = lowByte(LFO2toOSC3DETUNE);
   flashData[56] = 0;
   flashData[57] = 0;
   flashData[58] = 0;

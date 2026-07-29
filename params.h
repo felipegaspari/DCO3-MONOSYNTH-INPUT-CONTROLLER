@@ -21,7 +21,7 @@ int16_t calibrationVal;
 //
 bool manualCalibration = false;
 int8_t manualCalibrationStage = 0;
-int8_t manualCalibrationInitAmpCompOffset[NUM_OSCILLATORS] = {0,0,0,0,0,0,0,0};  
+int8_t manualCalibrationInitAmpCompOffset[NUM_OSCILLATORS] = { 0, 0, 0 };  
 
 int8_t velocityToVCF = 0;
 int8_t velocityToVCA = 0;
@@ -75,6 +75,7 @@ int16_t LFO2toDCO;
 int16_t LFO2toDETUNE1;
 int16_t LFO2toDETUNE2;
 int16_t LFO2toOSC2DETUNE;
+int16_t LFO2toOSC3DETUNE;
 
 int16_t LFO3Level;
 int8_t LFO3Waveform;
