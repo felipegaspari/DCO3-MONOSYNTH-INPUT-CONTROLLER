@@ -54,7 +54,7 @@ Primarily a **protocol sender**. Live inbound apply-router is almost unused (`pa
 - **`'a'..'f'` payload sizes** — must match Mainboard `serial_input_protocol.h` / handlers.
 - **Screen `'q'` is 16 chars; Mainboard `'q'` is 8** — do not conflate.
 - **Serial2 peer is Mainboard**, not DCO (despite some comments).
-- **GP5** LED PWM vs Serial2 RX overlap.
+- LED PWM on **GP6** (moved off GP5) so Serial2 RX can take DCO `'x'` (gap 154 relay + cal 155).
 - Preset **140-byte** layout — extend only by updating both load and write paths.
 
 ---

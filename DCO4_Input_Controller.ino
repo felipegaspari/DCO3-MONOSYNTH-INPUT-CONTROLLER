@@ -89,7 +89,7 @@ void setup1() {
 }
 
 void loop1() {
-  // Core1: map manual controls, TX blocks, LED refresh, inbound 'x' parser.
+  // Core1: map manual controls, TX blocks, LED refresh, DCO Serial2 'x' relay.
 
   unsigned long loopStartMicros = micros();
 
@@ -125,8 +125,8 @@ void loop1() {
     //serial_send_param_change(15, ADSR3toDETUNE1_formula * 100000);
     //Serial.println(tiempodeejecuciontotal);
   }
-        // Process any incoming frames from the mainboard/DCO on Serial1
-        serial_read_from_mainboard();
+  // DCO hub: Serial2 RX — forward gap 154 to Screen; store cal offset 155
+  serial_read_from_dco();
 }
 
 void loop() {

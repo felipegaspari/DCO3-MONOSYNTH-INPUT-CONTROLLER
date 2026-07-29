@@ -118,19 +118,44 @@ void serialSendParamByteToScreen(byte paramNumber, byte paramValue)
 }
 
 // ---------------------------------------------------------------------------
-// Parser-based receiver for mainboard/DCO frames on Serial1
+// Parser-based receiver for DCO 'x' frames on Serial2 (hub path).
 // ---------------------------------------------------------------------------
 
-// Handle 32-bit PARAM ('x') from the mainboard/DCO path.
-// Used here only for PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO (155):
-//   value (uint32) lower 16 bits = [oscIndex:8 | offset:8]
-static void input_handle_param32_from_mainboard(char, const uint8_t* payload, uint8_t len) {
+// Forward a decoded PARAM_32 payload as a full 'x' frame to Screen (Serial1).
+static void serial_forward_param32_to_screen(const uint8_t* payload, uint8_t len) {
+#ifdef ENABLE_SERIAL1
+  if (len != SERIAL_PAYLOAD_LEN_PARAM_32) {
+    return;
+  }
+  byte bytesArray[7] = {
+    (uint8_t)'x',
+    payload[0], payload[1], payload[2], payload[3], payload[4],
+    finishByte
+  };
+  while (Serial1.availableForWrite() < 7) {}
+  Serial1.write(bytesArray, 7);
+#else
+  (void)payload;
+  (void)len;
+#endif
+}
+
+// Handle 32-bit PARAM ('x') from DCO on Serial2:
+//   154 PARAM_GAP_FROM_DCO → forward same 'x' to Screen (replaces DCO Screen UART)
+//   155 PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO → store + optional 'y' echo
+//   value (uint32) lower 16 bits for 155 = [oscIndex:8 | offset:8]
+static void input_handle_param32_from_dco(char, const uint8_t* payload, uint8_t len) {
   if (len != SERIAL_PAYLOAD_LEN_PARAM_32) {
     return;
   }
 
   ParamFrame frame;
   decode_param_x(payload, frame);
+
+  if (frame.id == (uint8_t)PARAM_GAP_FROM_DCO) {
+    serial_forward_param32_to_screen(payload, len);
+    return;
+  }
 
   if (frame.id != (uint8_t)PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO) {
     return;
@@ -139,11 +164,6 @@ static void input_handle_param32_from_mainboard(char, const uint8_t* payload, ui
   uint16_t packed  = (uint16_t)frame.value;
   uint8_t  oscIndex = (uint8_t)(packed >> 8);
   int8_t   offset   = (int8_t)(packed & 0xFF);
-
-  // Serial.print("[IN] RX PARAM32 id=155 idx=");
-  // Serial.print((int)oscIndex);
-  // Serial.print(" offset=");
-  // Serial.println((int)offset);
 
   if (oscIndex < NUM_OSCILLATORS) {
     manualCalibrationInitAmpCompOffset[oscIndex] = offset;
@@ -162,12 +182,12 @@ static void input_handle_param32_from_mainboard(char, const uint8_t* payload, ui
   }
 }
 
-// Command table and parser context for Serial1 (mainboard->input link).
-static const SerialCommandDef mainboardSerial1Commands[] = {
-  { SERIAL_CMD_PARAM_32, SERIAL_PAYLOAD_LEN_PARAM_32, input_handle_param32_from_mainboard },
+// Command table and parser context for Serial2 (DCO → Input).
+static const SerialCommandDef dcoSerial2Commands[] = {
+  { SERIAL_CMD_PARAM_32, SERIAL_PAYLOAD_LEN_PARAM_32, input_handle_param32_from_dco },
 };
 
-static SerialParserContext mainboardSerial1Parser = {
+static SerialParserContext dcoSerial2Parser = {
   SERIAL_WAIT_FOR_CMD,
   0,
   {0},
@@ -176,28 +196,32 @@ static SerialParserContext mainboardSerial1Parser = {
   0
 };
 
-// Core1: non-blocking Serial1 parser pump for inbound 'x' frames.
-void serial_read_from_mainboard() {
-#ifdef ENABLE_SERIAL1
-  // Expire any stale partial frame (only if we're in a frame).
-  if (mainboardSerial1Parser.state == SERIAL_READ_PAYLOAD) {
+// Core1: non-blocking Serial2 parser pump for inbound DCO 'x' frames.
+void serial_read_from_dco() {
+#ifdef ENABLE_SERIAL2
+  if (dcoSerial2Parser.state == SERIAL_READ_PAYLOAD) {
     uint32_t now = micros();
-    serial_parser_check_timeout(mainboardSerial1Parser, now);
+    serial_parser_check_timeout(dcoSerial2Parser, now);
   }
 
-  // Consume all available bytes without blocking.
-  if (Serial1.available() > 0) {
-    uint32_t now = micros();  // one timestamp per batch is enough
-    while (Serial1.available() > 0) {
-      uint8_t b = Serial1.read();
+  if (Serial2.available() > 0) {
+    uint32_t now = micros();
+    while (Serial2.available() > 0) {
+      uint8_t b = Serial2.read();
       serial_parser_process_byte(
-        mainboardSerial1Parser,
-        mainboardSerial1Commands,
-        sizeof(mainboardSerial1Commands) / sizeof(mainboardSerial1Commands[0]),
+        dcoSerial2Parser,
+        dcoSerial2Commands,
+        sizeof(dcoSerial2Commands) / sizeof(dcoSerial2Commands[0]),
         b,
         now
       );
     }
   }
 #endif
+}
+
+// Legacy name: previously parsed 'x' on Serial1 (wrong peer for hub). Kept as no-op
+// alias site compatibility — prefer serial_read_from_dco().
+void serial_read_from_mainboard() {
+  serial_read_from_dco();
 }

@@ -13,7 +13,8 @@
 // can understand this header in isolation.
 typedef unsigned char byte;
 
-void serial_read_from_mainboard();
+void serial_read_from_mainboard();  // legacy name; pumps Serial1 (unused for DCO hub)
+void serial_read_from_dco();        // Serial2 RX: DCO 'x' (154 forward, 155 store)
 
 float freq;
 

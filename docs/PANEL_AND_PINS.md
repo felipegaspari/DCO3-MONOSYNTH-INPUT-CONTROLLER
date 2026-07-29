@@ -10,7 +10,7 @@ Hardware mapping for **DCO4_Input_Controller** (RP2040 front panel).
 |------|------|------|------|
 | `Serial` | USB | 2 000 000 | Debug |
 | `Serial1` | RX **GP1**, TX **GP0** | 2 500 000 | Screen |
-| `Serial2` | RX **GP5**, TX **GP4** | 2 500 000 | Mainboard |
+| `Serial2` | RX **GP5**, TX **GP4** | 2 500 000 | DCO hub (panel TX + gap/offset RX) |
 
 FIFO 512, polling mode. Brought up in `setup1()`.
 
@@ -77,11 +77,11 @@ Digital scan fills `valorMUX1[0..47]` (3 banks × 16 channels). Analog reads fil
 | DATA | GP11 |
 | LATCH | GP12 |
 | CLK | GP13 |
-| PWM brightness | **GP5** (`PIN_LED_PWM`) |
+| PWM brightness | **GP6** (`PIN_LED_PWM`) |
 
 `LEDPins[16]` maps logical LEDs to 595 bit indices. Refresh: `LED_Control_Mux.update()` on Core1 ~31 ms.
 
-**Hardware conflict check:** GP5 is both Serial2 RX and LED PWM in firmware — document/verify PCB.
+**Note:** LED PWM was moved off **GP5** so Serial2 RX can receive DCO `'x'` (gap 154 / cal offset 155). Rewire PCB brightness/OE to GP6 if it still targets GP5.
 
 ---
 

@@ -13,7 +13,9 @@ Rox74HC595<2> LED_Control_Mux;
 #define PIN_DATA 11   // pin 14 on 74HC595 (DATA)  / DS
 #define PIN_LATCH 12  // pin 12 on 74HC595 (LATCH) / ST
 #define PIN_CLK 13    // pin 11 on 74HC595 (CLK)   / SH
-#define PIN_LED_PWM 5
+// Brightness PWM must not share Serial2 RX (GP5). GP6 is free on the panel map.
+// If the PCB still wires LED OE/brightness to GP5, rewire to GP6.
+#define PIN_LED_PWM 6
 
 uint8_t LEDPins[16] = { 5, 4, 3, 2, 1, 0, 7, 6, 11, 12, 9, 10, 8, 8, 8, 8 };
 
