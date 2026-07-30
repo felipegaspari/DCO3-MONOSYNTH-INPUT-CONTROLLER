@@ -1,15 +1,15 @@
 ## Serial & Parameter Protocol – Usage Guide
 
-This document explains how to use the shared **serial** and **parameter** infrastructure in any MCU project in the DCO4 system (mainboard, DCO board, screen, input board, etc.).
+This document explains how to use the shared **serial** and **parameter** infrastructure in any MCU project in the DCO4 system (DCO board, input board, screen, etc.).
 
 The goal: you can copy the library headers into a new project, define a few hooks, and immediately speak the same protocol.
 
 ### Input Controller notes (this repo)
 
-- This board is primarily a **sender** of `'a'..'f'` control blocks and `'p'`/`'w'` ParamId frames to **Mainboard Serial8** (via Input `Serial2`) and UI frames to the **Screen** (via Input `Serial1`).
-- Live inbound path today: `serial_read_from_mainboard()` on **Serial1** for `'x'` calibration offset only — see [`CONTROL_PIPELINE.md`](CONTROL_PIPELINE.md).
+- This board is the **serial hub**: it sends `'a'..'f'` control blocks and `'p'`/`'w'` ParamId frames to the **DCO** (via `DCO_PORT` = `Serial1`, TX GP0) and UI frames to the **Screen** (via `SCREEN_PORT` = `Serial2`, TX GP4). The Screen has no direct DCO link. Address the links through the aliases in `Serial.h`; the port numbers do not tell you the peer.
+- Live inbound path today: `serial_read_from_dco()` on **`DCO_PORT`** (RX GP1) for DCO `'x'` frames — gap 154 is relayed verbatim to the Screen, cal offset 155 is stored locally — see [`CONTROL_PIPELINE.md`](CONTROL_PIPELINE.md).
 - `params.ino` apply-router is **commented out**; do not assume `update_parameters` is live here.
-- `serial_input_protocol.h` is present but not included by `Serial.h` (sizes are hardcoded in TX helpers) — keep payloads aligned with Mainboard handlers.
+- `serial_input_protocol.h` is present but not included by `Serial.h` (sizes are hardcoded in TX helpers) — it describes the same command set the DCO parses on its `Serial2`.
 - Panel / pin detail: [`PANEL_AND_PINS.md`](PANEL_AND_PINS.md).
 
 ---
@@ -21,8 +21,8 @@ These files are intended to be MCU‑agnostic and copy‑pasteable between proje
 - `params_def.h` – canonical `enum ParamId : uint16_t` for the whole system.
 - `param_router.h` – generic table‑driven parameter router (`ParamDescriptorT` + `param_router_apply`).
 - `serial_param_protocol.h` – decode helpers for `'p'/'w'/'x'` parameter frames into `ParamFrame { id, value }`.
-- `serial_protocol.h` – command bytes and payload sizes for the **mainboard ↔ DCO** link (`'n','o','f','s','p','w','x'`).
-- `serial_input_protocol.h` – command bytes and payload sizes for the **input board → mainboard** link (`'a'..'f','p','w','q'`).
+- `serial_protocol.h` – command bytes and payload sizes for the high-speed **DCO** link (`'n','o','f','s','p','w','x'`); header comments still call it “mainboard ↔ DCO”.
+- `serial_input_protocol.h` – command bytes and payload sizes for the legacy **input board → mainboard** link (`'a'..'f','p','w','q'`).
 - `serial_parser.h` – generic non‑blocking state‑machine parser (`SerialParserContext`, `SerialCommandDef`, `serial_parser_process_byte`).
 
 You can treat these as the “library core.”
@@ -224,11 +224,13 @@ On the sender MCU:
 
 ```cpp
 inline void serial_send_global_reset(uint8_t flag) {
-  while (Serial2.availableForWrite() < 2) {}
+  while (DCO_PORT.availableForWrite() < 1) {}
   uint8_t bytes[2] = { (uint8_t)SERIAL_CMD_GLOBAL_RESET, flag };
-  Serial2.write(bytes, 2);
+  DCO_PORT.write(bytes, 2);
 }
 ```
+
+Always wait on `< 1`, never on the frame length: on RP2040 hardware UARTs `availableForWrite()` returns only 0 or 1, so waiting for a larger count blocks the core forever.
 
 ---
 
@@ -297,8 +299,8 @@ inline void send_lfo3_to_vcf(uint16_t value) {
     lowByte(value),
     1  // finish
   };
-  while (Serial2.availableForWrite() < 5) {}
-  Serial2.write(bytes, 5);
+  while (DCO_PORT.availableForWrite() < 1) {}
+  DCO_PORT.write(bytes, 5);
 }
 ```
 

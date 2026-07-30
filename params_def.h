@@ -116,10 +116,10 @@ enum ParamId : uint8_t {
   PARAM_MANUAL_CALIBRATION_STAGE = 152,
   PARAM_MANUAL_CALIBRATION_OFFSET= 153,
 
-  // PARAM 154: 32-bit gap from DCO — Input relays 'x' to Screen on Serial1.
+  // PARAM 154: 32-bit gap from DCO — Input relays the 'x' on to the Screen.
   PARAM_GAP_FROM_DCO             = 154,
 
-  // 155: manual calibration offsets reported from DCO → Input (Serial2).
+  // 155: manual calibration offsets reported from DCO → Input.
   PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO = 155,
 
   // 156: explicit "store manual calibration offsets" command.

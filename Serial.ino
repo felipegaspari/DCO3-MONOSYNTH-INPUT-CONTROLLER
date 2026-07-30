@@ -1,129 +1,130 @@
-// Send uint16 frame 'u' on Serial2. Currently unused helper.
+// Send uint16 frame 'u' to the DCO. Currently unused helper.
 void sendUint16(uint16_t f) {
   byte *b = (byte *)&f;
 
-  Serial2.write((char *)"u");
+  DCO_PORT.write((char *)"u");
 
-  Serial2.write(b, 2);
+  DCO_PORT.write(b, 2);
 }
 
-// Send float bytes after 't' on Serial2. Currently unused helper.
+// Send float bytes after 't' to the DCO. Currently unused helper.
 void sendFloat(float f) {
   byte *b = (byte *)&f;
 
-  Serial2.print("t");
+  DCO_PORT.print("t");
   byte ndata = 0;
   for (int i = 0; i < 4; i++) {
 
-    Serial2.write(b[i]);
+    DCO_PORT.write(b[i]);
   }
   return;
 }
 
-// Send 'k' OK on Serial2. Currently unused helper.
+// Send 'k' OK to the DCO. Currently unused helper.
 void sendOK() {
 
-  Serial2.write((char *)"k");
+  DCO_PORT.write((char *)"k");
   //Serial.println("Sent OK");
 }
 
-// Legacy autotune kick on Serial2. Currently unused.
+// Legacy autotune kick to the DCO. Currently unused.
 void serial_send_autotune() {
   byte autotune_on = 255;
-  Serial2.write((char *)"a");
-  Serial2.write(autotune_on);
-  Serial2.flush();
+  DCO_PORT.write((char *)"a");
+  DCO_PORT.write(autotune_on);
+  DCO_PORT.flush();
   //Serial.println("Sent autotune on");
 }
 
-// Screen UI mode signal ('s' + byte) on Serial1.
+// Screen UI mode signal ('s' + byte).
 void serial_send_signal(byte signal) {
-#ifdef ENABLE_SERIAL1
+#ifdef ENABLE_SCREEN_LINK
 
-  Serial1.write((char *)"s");
+  SCREEN_PORT.write((char *)"s");
 
-  Serial1.write(signal);
+  SCREEN_PORT.write(signal);
 #endif
 }
 
 
-// Send 'p' 16-bit ParamId to Screen (optional) and Mainboard Serial2.
+// Send 'p' 16-bit ParamId to the DCO, and to the Screen when sendToAll.
 void serial_send_param_change(byte param, uint16_t paramValue, bool sendToAll) {
   byte bytesArray[5] = { (uint8_t)'p', param, highByte(paramValue), lowByte(paramValue), finishByte };
-#ifdef ENABLE_SERIAL1
+#ifdef ENABLE_SCREEN_LINK
   if (sendToAll) {
-    Serial1.write(bytesArray, 5);
+    SCREEN_PORT.write(bytesArray, 5);
   }
 #endif
-#ifdef ENABLE_SERIAL2
+#ifdef ENABLE_DCO_LINK
   if (paramValue != -1) {  // paramValue 100 = send to screen only
-    Serial2.write(bytesArray, 5);
+    DCO_PORT.write(bytesArray, 5);
   }
 #endif
 }
 
-// Send 'w' 8-bit ParamId to Screen (optional) and Mainboard Serial2.
+// Send 'w' 8-bit ParamId to the DCO, and to the Screen when sendToAll.
 void serial_send_param_change_byte(byte param, byte paramValue, bool sendToAll) {
   byte bytesArrayByte[4] = { (uint8_t)'w', param, paramValue, finishByte };
-#ifdef ENABLE_SERIAL1
+#ifdef ENABLE_SCREEN_LINK
   if (sendToAll) {
-    Serial1.write(bytesArrayByte, 4);
+    SCREEN_PORT.write(bytesArrayByte, 4);
   }
 #endif
-#ifdef ENABLE_SERIAL2
+#ifdef ENABLE_DCO_LINK
   if (paramValue != -1) {  // paramValue 100 = send to screen only
-    Serial2.write(bytesArrayByte, 4);
+    DCO_PORT.write(bytesArrayByte, 4);
   }
 #endif
 }
 
-// Send preset name (8 chars) to Mainboard via 'q' on Serial2.
+// Send preset name (8 chars) to the DCO via 'q'.
 void serial_send_preset_name_to_mainboard() {
-  Serial2.write((char *)"q");
-  // Mainboard-side 'q' (input link) expects 8 chars; send first 8 only.
-  Serial2.write(presetNameVal, 8);
-  Serial2.write(finishByte);
+  DCO_PORT.write((char *)"q");
+  // DCO-side 'q' (input link) expects 8 chars; send first 8 only.
+  DCO_PORT.write(presetNameVal, 8);
+  DCO_PORT.write(finishByte);
 }
 
-// Send preset scroll (number + 16-char name) to Screen via 'q' on Serial1.
+// Send preset scroll (number + 16-char name) to the Screen via 'q'.
 void serial_send_preset_scroll(byte presetNumber, byte presetNameSerial[]) {
 
-#ifdef ENABLE_SERIAL1
+#ifdef ENABLE_SCREEN_LINK
 
-  Serial1.write((char *)"q");
+  SCREEN_PORT.write((char *)"q");
 
-  Serial1.write(presetNumber);
+  SCREEN_PORT.write(presetNumber);
   // Screen-side 'q' uses 16-character names.
-  Serial1.write(presetNameSerial, 16);
-  Serial1.write(finishByte);
+  SCREEN_PORT.write(presetNameSerial, 16);
+  SCREEN_PORT.write(finishByte);
 #endif
 }
 
-// Send save-name character position to Screen via 'c' on Serial1.
+// Send save-name character position to the Screen via 'c'.
 void serial_send_save_char_select(byte serialPresetChar) {
-#ifdef ENABLE_SERIAL1
+#ifdef ENABLE_SCREEN_LINK
 
-  Serial1.write((char *)"c");
+  SCREEN_PORT.write((char *)"c");
 
-  Serial1.write(serialPresetChar);
+  SCREEN_PORT.write(serialPresetChar);
 #endif
 }
 
-// Send 'y' byte param to Screen on Serial1.
+// Send 'y' byte param to the Screen.
 void serialSendParamByteToScreen(byte paramNumber, byte paramValue)
 {
- while(Serial1.availableForWrite() < 1) {};
+ while(SCREEN_PORT.availableForWrite() < 1) {};
   byte bytesArray[4] = {(uint8_t)'y', paramNumber, paramValue, finishByte};
-  Serial1.write(bytesArray, 4);
+  SCREEN_PORT.write(bytesArray, 4);
 }
 
 // ---------------------------------------------------------------------------
-// Parser-based receiver for DCO 'x' frames on Serial2 (hub path).
+// Parser-based receiver for DCO 'x' frames arriving on DCO_PORT RX
+// (GP1 <- DCO GP20).
 // ---------------------------------------------------------------------------
 
-// Forward a decoded PARAM_32 payload as a full 'x' frame to Screen (Serial1).
+// Forward a decoded PARAM_32 payload as a full 'x' frame to the Screen (GP4 -> Screen GP13).
 static void serial_forward_param32_to_screen(const uint8_t* payload, uint8_t len) {
-#ifdef ENABLE_SERIAL1
+#ifdef ENABLE_SCREEN_LINK
   if (len != SERIAL_PAYLOAD_LEN_PARAM_32) {
     return;
   }
@@ -132,16 +133,16 @@ static void serial_forward_param32_to_screen(const uint8_t* payload, uint8_t len
     payload[0], payload[1], payload[2], payload[3], payload[4],
     finishByte
   };
-  while (Serial1.availableForWrite() < 7) {}
-  Serial1.write(bytesArray, 7);
+  while (SCREEN_PORT.availableForWrite() < 1) {}
+  SCREEN_PORT.write(bytesArray, 7);
 #else
   (void)payload;
   (void)len;
 #endif
 }
 
-// Handle 32-bit PARAM ('x') from DCO on Serial2:
-//   154 PARAM_GAP_FROM_DCO → forward same 'x' to Screen (replaces DCO Screen UART)
+// Handle 32-bit PARAM ('x') from the DCO:
+//   154 PARAM_GAP_FROM_DCO → forward the same 'x' on to the Screen
 //   155 PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO → store + optional 'y' echo
 //   value (uint32) lower 16 bits for 155 = [oscIndex:8 | offset:8]
 static void input_handle_param32_from_dco(char, const uint8_t* payload, uint8_t len) {
@@ -182,12 +183,12 @@ static void input_handle_param32_from_dco(char, const uint8_t* payload, uint8_t 
   }
 }
 
-// Command table and parser context for Serial2 (DCO → Input).
-static const SerialCommandDef dcoSerial2Commands[] = {
+// Command table and parser context for the DCO link RX (DCO → Input).
+static const SerialCommandDef dcoLinkCommands[] = {
   { SERIAL_CMD_PARAM_32, SERIAL_PAYLOAD_LEN_PARAM_32, input_handle_param32_from_dco },
 };
 
-static SerialParserContext dcoSerial2Parser = {
+static SerialParserContext dcoLinkParser = {
   SERIAL_WAIT_FOR_CMD,
   0,
   {0},
@@ -196,32 +197,28 @@ static SerialParserContext dcoSerial2Parser = {
   0
 };
 
-// Core1: non-blocking Serial2 parser pump for inbound DCO 'x' frames.
+// Core1: non-blocking parser pump for inbound DCO 'x' frames.
+// The DCO link is in polling mode, so bytes only leave the 32-byte hardware FIFO
+// when this runs — roughly every 128 us of headroom at 2.5 Mbaud.
 void serial_read_from_dco() {
-#ifdef ENABLE_SERIAL2
-  if (dcoSerial2Parser.state == SERIAL_READ_PAYLOAD) {
+#ifdef ENABLE_DCO_LINK
+  if (dcoLinkParser.state == SERIAL_READ_PAYLOAD) {
     uint32_t now = micros();
-    serial_parser_check_timeout(dcoSerial2Parser, now);
+    serial_parser_check_timeout(dcoLinkParser, now);
   }
 
-  if (Serial2.available() > 0) {
+  if (DCO_PORT.available() > 0) {
     uint32_t now = micros();
-    while (Serial2.available() > 0) {
-      uint8_t b = Serial2.read();
+    while (DCO_PORT.available() > 0) {
+      uint8_t b = DCO_PORT.read();
       serial_parser_process_byte(
-        dcoSerial2Parser,
-        dcoSerial2Commands,
-        sizeof(dcoSerial2Commands) / sizeof(dcoSerial2Commands[0]),
+        dcoLinkParser,
+        dcoLinkCommands,
+        sizeof(dcoLinkCommands) / sizeof(dcoLinkCommands[0]),
         b,
         now
       );
     }
   }
 #endif
-}
-
-// Legacy name: previously parsed 'x' on Serial1 (wrong peer for hub). Kept as no-op
-// alias site compatibility — prefer serial_read_from_dco().
-void serial_read_from_mainboard() {
-  serial_read_from_dco();
 }

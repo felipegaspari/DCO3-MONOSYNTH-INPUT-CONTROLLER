@@ -312,6 +312,8 @@ delay(2);
 
   serial_send_param_change(ParamId::PARAM_VCA_LEVEL,   (uint16_t)VCALevel,   false);
 
+  serial_send_param_change(ParamId::PARAM_VCF_KEYTRACK, (uint16_t)VCFKeytrack, false);
+
   serial_send_param_change(ParamId::PARAM_LFO1_TO_VCA, (uint16_t)LFO1toVCA,  false);
 
   serial_send_param_change(ParamId::PARAM_LFO2_TO_PW,  (uint16_t)LFO2toPWM,  false);

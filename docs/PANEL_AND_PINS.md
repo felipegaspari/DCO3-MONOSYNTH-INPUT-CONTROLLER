@@ -9,10 +9,15 @@ Hardware mapping for **DCO4_Input_Controller** (RP2040 front panel).
 | Port | Pins | Baud | Peer |
 |------|------|------|------|
 | `Serial` | USB | 2 000 000 | Debug |
-| `Serial1` | RX **GP1**, TX **GP0** | 2 500 000 | Screen |
-| `Serial2` | RX **GP5**, TX **GP4** | 2 500 000 | DCO hub (panel TX + gap/offset RX) |
+| `Serial1` (`DCO_PORT`) | TX **GP0** → DCO GP21, RX **GP1** ← DCO GP20 | 2 500 000 | DCO — panel blocks `'a'`..`'f'`, ParamId frames, 9-byte `'q'` out; `'x'` 154/155 back in |
+| `Serial2` (`SCREEN_PORT`) | TX **GP4** → Screen GP13; RX **GP5** unwired | 2 500 000 | Screen — UI frames and the relayed DCO gap, TX only (the Screen never transmits) |
 
 FIFO 512, polling mode. Brought up in `setup1()`.
+
+Port numbers say nothing about the peer, so the code addresses each link through the aliases
+`DCO_PORT` (= `Serial1`) and `SCREEN_PORT` (= `Serial2`) declared in `Serial.h`. `Serial1` is the
+two-way DCO link, on the pair the archived STM32 Mainboard used to occupy; the wires were
+re-terminated at the DCO, so no pin on this board changed.
 
 ---
 
@@ -77,11 +82,14 @@ Digital scan fills `valorMUX1[0..47]` (3 banks × 16 channels). Analog reads fil
 | DATA | GP11 |
 | LATCH | GP12 |
 | CLK | GP13 |
-| PWM brightness | **GP6** (`PIN_LED_PWM`) |
+| PWM brightness | **GP5** (`PIN_LED_PWM`) |
 
 `LEDPins[16]` maps logical LEDs to 595 bit indices. Refresh: `LED_Control_Mux.update()` on Core1 ~31 ms.
 
-**Note:** LED PWM was moved off **GP5** so Serial2 RX can receive DCO `'x'` (gap 154 / cal offset 155). Rewire PCB brightness/OE to GP6 if it still targets GP5.
+**Note:** brightness is not implemented in hardware. `setup1()` parks GP5 at a fixed
+`analogWrite(245)` and nothing varies it afterwards. Because that call runs after `Serial2.begin()`,
+GP5 stops being `Serial2` RX — which costs nothing, since the pin has no conductor and the Screen
+never transmits.
 
 ---
 

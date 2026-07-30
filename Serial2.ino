@@ -1,4 +1,4 @@
-// @1 ms / preset load: TX manual control blocks 'a'..'f' to Mainboard (Serial2) and Screen (Serial1).
+// @1 ms / preset load: TX manual control blocks 'a'..'f' to the DCO, and 'a'/'b' to the Screen.
 void serial_send_manual_controls(bool presetLoading) {
   if (faderRow1ControlManual || presetLoading) {
     // Exponential-mapped values for DCO
@@ -28,10 +28,10 @@ void serial_send_manual_controls(bool presetLoading) {
     dataArrayScreen[7] = lowByte(ADSR1_release);
 
     // Send ADSR1 values to DCO and Screen
-    Serial2.write((char *)"a");
-    Serial2.write(dataArrayDCO, 8);
-    Serial1.write((char *)"a");
-    Serial1.write(dataArrayScreen, 8);
+    DCO_PORT.write((char *)"a");
+    DCO_PORT.write(dataArrayDCO, 8);
+    SCREEN_PORT.write((char *)"a");
+    SCREEN_PORT.write(dataArrayScreen, 8);
   }
 
   if ((faderRow2ControlManual && !ADSR3Enabled)  || presetLoading) {
@@ -62,10 +62,10 @@ void serial_send_manual_controls(bool presetLoading) {
     dataArrayScreen[7] = lowByte(ADSR2_release);
 
     // Send ADSR2 values to DCO and Screen
-    Serial2.write((char *)"b");
-    Serial2.write(dataArrayDCO, 8);
-    Serial1.write((char *)"b");
-    Serial1.write(dataArrayScreen, 8);
+    DCO_PORT.write((char *)"b");
+    DCO_PORT.write(dataArrayDCO, 8);
+    SCREEN_PORT.write((char *)"b");
+    SCREEN_PORT.write(dataArrayScreen, 8);
   } 
   if ((faderRow2ControlManual && ADSR3Enabled)  || presetLoading) {
     byte dataArray[8];
@@ -83,10 +83,10 @@ void serial_send_manual_controls(bool presetLoading) {
     dataArray[6] = highByte(ADSR3_release_serial);
     dataArray[7] = lowByte(ADSR3_release_serial);
 
-    // Send ADSR3 manual values to DCO (Serial2) only.
+    // Send ADSR3 manual values to the DCO only.
     // (Screen does not currently display ADSR3 via 'c' frames.)
-    Serial2.write((char *)"c");
-    Serial2.write(dataArray, 8);
+    DCO_PORT.write((char *)"c");
+    DCO_PORT.write(dataArray, 8);
   }
 
   if (VCFPotsControlManual  || presetLoading) {
@@ -100,8 +100,8 @@ void serial_send_manual_controls(bool presetLoading) {
     dataArray[6] = highByte(LFO2toVCF);
     dataArray[7] = lowByte(LFO2toVCF);
 
-    Serial2.write((char *)"d");
-    Serial2.write(dataArray, 8);
+    DCO_PORT.write((char *)"d");
+    DCO_PORT.write(dataArray, 8);
   }
 
   if (VCAPotsControlManual  || presetLoading) {
@@ -110,8 +110,8 @@ void serial_send_manual_controls(bool presetLoading) {
     dataArray[0] = highByte(ADSR1toVCA);
     dataArray[1] = lowByte(ADSR1toVCA);
 
-    Serial2.write((char *)"e");
-    Serial2.write(dataArray, 2);
+    DCO_PORT.write((char *)"e");
+    DCO_PORT.write(dataArray, 2);
   }
 
   if (PWMPotsControlManual  || presetLoading) {
@@ -120,99 +120,102 @@ void serial_send_manual_controls(bool presetLoading) {
     dataArray[0] = highByte(PW);
     dataArray[1] = lowByte(PW);
 
-    Serial2.write((char *)"f");
-    Serial2.write(dataArray, 2);
+    DCO_PORT.write((char *)"f");
+    DCO_PORT.write(dataArray, 2);
   }
 }
 
-// Legacy flag-driven Serial2 TX (portamento/sync/etc). Not scheduled in loop1 today.
+// Legacy flag-driven DCO TX (portamento/sync/etc). Not scheduled in loop1 today.
+// Gates are `>= 1`: a hardware UART reports 0 or 1, never a free-byte count, so
+// asking for room for a whole frame would never let anything through. A full FIFO
+// leaves the flag set for the next call.
 void sendSerial() {  // to DCO
 
 
   if (serial_send_portamentoFlag) {
-    if (Serial2.availableForWrite() > 1) {
+    if (DCO_PORT.availableForWrite() >= 1) {
       byte byteArray[2] = { (uint8_t)'r', (uint8_t)portamentoTime };
-      Serial2.write(byteArray, 2);
+      DCO_PORT.write(byteArray, 2);
       serial_send_portamentoFlag = false;
     }
   }
 
   if (serial_send_oscSyncModeFlag) {
-    if (Serial2.availableForWrite() > 1) {
+    if (DCO_PORT.availableForWrite() >= 1) {
       byte byteArray[2] = { (uint8_t)'t', (uint8_t)oscSyncMode };
-      Serial2.write(byteArray, 2);
+      DCO_PORT.write(byteArray, 2);
       serial_send_oscSyncModeFlag = false;
     }
   }
 
   if (serial_send_OSC1IntervalFlag) {
-    if (Serial2.availableForWrite() > 1) {
+    if (DCO_PORT.availableForWrite() >= 1) {
       byte byteArray[2] = { (uint8_t)'y', (uint8_t)OSC1Interval };
-      Serial2.write(byteArray, 2);
+      DCO_PORT.write(byteArray, 2);
       serial_send_OSC1IntervalFlag = false;
     }
   }
 
   if (serial_send_OSC2IntervalFlag) {
-    if (Serial2.availableForWrite() > 1) {
+    if (DCO_PORT.availableForWrite() >= 1) {
       byte byteArray[2] = { (uint8_t)'z', (uint8_t)OSC2Interval };
-      Serial2.write(byteArray, 2);
+      DCO_PORT.write(byteArray, 2);
       serial_send_OSC2IntervalFlag = false;
     }
   }
 
   if (serial_send_LFO1SpeedFlag) {
-    if (Serial2.availableForWrite() > 2) {
+    if (DCO_PORT.availableForWrite() >= 1) {
       byte *b = (byte *)&LFO1Speed;
       byte byteArray[3] = { (byte)'l', b[0], b[1] };
-      Serial2.write(byteArray, 3);
+      DCO_PORT.write(byteArray, 3);
       serial_send_LFO1SpeedFlag = false;
     }
   }
 
   if (serial_send_LFO1toDCOFlag) {
-    if (Serial2.availableForWrite() > 2) {
+    if (DCO_PORT.availableForWrite() >= 1) {
       byte *b = (byte *)&LFO1toDCO;
       byte byteArray[3] = { (byte)'m', b[0], b[1] };
-      Serial2.write(byteArray, 3);
+      DCO_PORT.write(byteArray, 3);
       serial_send_LFO1toDCOFlag = false;
     }
   }
 
   if (serial_send_LFO1toDCOWaveChangeFlag) {
-    if (Serial2.availableForWrite() > 1) {
+    if (DCO_PORT.availableForWrite() >= 1) {
       byte byteArray[2] = { (uint8_t)'b', (uint8_t)LFO1Waveform };
-      Serial2.write(byteArray, 2);
+      DCO_PORT.write(byteArray, 2);
       serial_send_LFO1toDCOWaveChangeFlag = false;
     }
   }
 
   if (serialSendADSR3ControlValuesFlag) {
-    if (Serial2.availableForWrite() > 4) {
+    if (DCO_PORT.availableForWrite() >= 1) {
       byte ADSR3BytesArray[5];
       ADSR3BytesArray[0] = (byte)'s';
       ADSR3BytesArray[1] = (byte)(ADSR3_attack / 16);
       ADSR3BytesArray[2] = (byte)(ADSR3_decay / 16);
       ADSR3BytesArray[3] = (byte)(ADSR3_sustain / 16);
       ADSR3BytesArray[4] = (byte)(ADSR3_release / 16);
-      //Serial2.write((char *)"s");
-      Serial2.write(ADSR3BytesArray, 5);
+      //DCO_PORT.write((char *)"s");
+      DCO_PORT.write(ADSR3BytesArray, 5);
       serialSendADSR3ControlValuesFlag = false;
     }
   }
 
   if (serialSendADSR3toDCOFlag) {
-    if (Serial2.availableForWrite() > 2) {
+    if (DCO_PORT.availableForWrite() >= 1) {
       byte *b = (byte *)&ADSR3toDETUNE1;
       byte byteArray[3] = { (byte)'w', b[0], b[1] };
-      Serial2.write(byteArray, 3);
+      DCO_PORT.write(byteArray, 3);
       serialSendADSR3toDCOFlag = false;
     }
   }
   if (serialSendADSR3ToOscSelectFlag) {
-    if (Serial2.availableForWrite() > 1) {
+    if (DCO_PORT.availableForWrite() >= 1) {
       byte byteArray[2] = { (byte)'c', (uint8_t)ADSR3ToOscSelect };
-      Serial2.write(byteArray, 2);
+      DCO_PORT.write(byteArray, 2);
       serialSendADSR3ToOscSelectFlag = false;
     }
   }

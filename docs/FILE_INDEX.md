@@ -7,13 +7,13 @@ Purpose of **every file**, and for each source function: **what it does**, **who
 - Preset bank / LittleFS: [`PRESETS.md`](PRESETS.md)
 - Control scan → serial path: [`CONTROL_PIPELINE.md`](CONTROL_PIPELINE.md)
 - Serial / ParamId how-to: [`README_serial_and_params.md`](README_serial_and_params.md)
-- Four-board topology: [`SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md) (stub → DCO4_DCO canonical)
+- Three-board topology: [`SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md) (stub → DCO4_DCO canonical)
 - Repo entry / doc index: [`../README.md`](../README.md)
 
 Headers with no bodies are marked **no function definitions**.  
 **Dead** = no live callers. **Unreachable** = call site exists but cannot run as currently gated. **`#ifdef` gated** = compiled only when the flag is set. **commented-out** = body fully commented (not compiled).
 
-MCU: **RP2040** (dual Arduino cores). Panel brain: mux faders/pots, encoders, buttons, 74HC595 LEDs, LittleFS presets; Serial2 → Mainboard, Serial1 → Screen.
+MCU: **RP2040** (dual Arduino cores). Panel brain: mux faders/pots, encoders, buttons, 74HC595 LEDs, LittleFS presets; `DCO_PORT` (= `Serial1`) ↔ DCO, `SCREEN_PORT` (= `Serial2`) → Screen (this board is the serial hub between them).
 
 ---
 
@@ -48,11 +48,14 @@ flowchart TD
   fiveMs -->|yes| adsr3Flag["serialSendADSR3ControlValuesFlag"]
   loop1 --> led31{"timer31msFlag2?"}
   led31 -->|yes| ledUpd["LED_Control_Mux.update"]
-  loop1 --> rx1["serial_read_from_mainboard on Serial1"]
+  loop1 --> rx1["serial_read_from_dco on DCO_PORT"]
 
-  manSend -->|Serial2| mb["Mainboard"]
-  manSend -->|Serial1 ADSR linear| scr["Screen"]
-  paramTx -->|Serial2 + Serial1| peers["Mainboard + Screen"]
+  manSend -->|DCO_PORT| mb["DCO"]
+  manSend -->|"SCREEN_PORT (ADSR linear)"| scr["Screen"]
+  paramTx -->|"DCO_PORT + SCREEN_PORT"| peers["DCO + Screen"]
+  mb -->|"'x' 154/155"| rx1
+  rx1 -->|"gap 154 as 'x' on SCREEN_PORT"| scr
+  rx1 -->|"cal offset 155 stored + 'y' echo"| scr
 ```
 
 | Context tag | Meaning |
@@ -63,11 +66,11 @@ flowchart TD
 | Every `loop` / `loop1` | Realtime forever loops |
 | Soft timer Core0 | Gated by `millisTimer()` flags (`timer1msFlag`, `timer99microsFlag`, `timer200msFlag`, …) |
 | Soft timer Core1 | Gated by `millisTimer2()` flags (`timer1msFlag2`, `timer5msFlag2`, `timer31msFlag2`, …) |
-| Serial1 (Screen) | TX UI signals / params / linear ADSR; RX `'x'` cal offset (fn name says “mainboard”) |
-| Serial2 (Mainboard) | TX `'a'`–`'f'` control blocks + `'p'`/`'w'` params (comments often wrongly say “DCO”) |
+| `DCO_PORT` = `Serial1` (DCO) | TX `'a'`–`'f'` control blocks + `'p'`/`'w'` params on GP0; RX DCO `'x'` (gap 154, cal offset 155) on GP1 |
+| `SCREEN_PORT` = `Serial2` (Screen) | TX UI signals / params / linear ADSR + relayed DCO `'x'` gap 154 on GP4; no RX (the Screen never transmits) |
 | Param TX | Live path is `serial_send_param_change` / `_byte` from encoders/buttons/presets |
 | Manual controls | `*ControlManual` flags → `setControlValues` + `serial_send_manual_controls` |
-| `#ifdef` | `ENABLE_SERIAL`, `ENABLE_SERIAL1`, `ENABLE_SERIAL2` |
+| `#ifdef` | `ENABLE_SERIAL`, `ENABLE_DCO_LINK`, `ENABLE_SCREEN_LINK` |
 
 ---
 
@@ -81,14 +84,14 @@ Main sketch: dual-core `setup`/`loop`/`setup1`/`loop1`, voice/param globals, UAR
 - `setup()` — `init_controls()` + `init_tables()`.
   - **Called from:** Arduino framework (Core 0).
   - **When:** Boot Core0 once.
-- `setup1()` — USB Serial + Serial1 (RX1/TX0) + Serial2 (RX5/TX4) @ 2 500 000; `init_LED_control`; `initFS`; `analogWrite(PIN_LED_PWM, 245)`.
+- `setup1()` — USB Serial + `DCO_PORT` (RX1/TX0) + `SCREEN_PORT` (RX5/TX4) @ 2 500 000; `init_LED_control`; `initFS`; `analogWrite(PIN_LED_PWM, 245)`.
   - **Called from:** Arduino framework (Core 1).
   - **When:** Boot Core1 once.
-  - Note: `PIN_LED_PWM` is GPIO **5**, same as `Serial2.setRX(5)` — pin conflict (see Docs).
+  - Note: `PIN_LED_PWM` is GPIO **5**, so this `analogWrite` takes the pin back from `SCREEN_PORT.setRX(5)`. Harmless: GP5 has no conductor and the Screen never transmits.
 - `loop()` — `millisTimer()`; `readControls()`; optional USB debug under `ENABLE_SERIAL` (`println("|")` @ `timer200msFlag`; large dump gated by `if (1 == 2)` → **Unreachable**).
   - **Called from:** Arduino framework (Core 0).
   - **When:** Forever.
-- `loop1()` — `millisTimer2()`; @1 ms `setControlValues` + `serial_send_manual_controls(false)`; @5 ms may set `serialSendADSR3ControlValuesFlag`; @31 ms `LED_Control_Mux.update()`; always `serial_read_from_mainboard()`. `sendSerial()` call is **commented-out**.
+- `loop1()` — `millisTimer2()`; @1 ms `setControlValues` + `serial_send_manual_controls(false)`; @5 ms may set `serialSendADSR3ControlValuesFlag`; @31 ms `LED_Control_Mux.update()`; always `serial_read_from_dco()`. `sendSerial()` call is **commented-out**.
   - **Called from:** Arduino framework (Core 1).
   - **When:** Forever.
 
@@ -116,59 +119,64 @@ TinyUSB MIDI device configuration. Sketch does **not** `#include <Adafruit_TinyU
 
 ### `Serial.h`
 
-`ENABLE_SERIAL` / `ENABLE_SERIAL1` / `ENABLE_SERIAL2`, finish byte, legacy TX flags (`serial_send_*Flag`, `serialSendADSR3*`), decls for param senders + `serial_read_from_mainboard`. **No function definitions.**
+`ENABLE_SERIAL` / `ENABLE_DCO_LINK` / `ENABLE_SCREEN_LINK`, the `DCO_PORT` / `SCREEN_PORT` aliases and the wiring comment, finish byte, legacy TX flags (`serial_send_*Flag`, `serialSendADSR3*`), decls for param senders + `serial_read_from_dco`. **No function definitions.**
 
 ### `Serial.ino`
 
-Outbound frames on Serial1/Serial2; inbound `'x'` parser on Serial1.
+Outbound frames on both links; inbound DCO `'x'` parser on `DCO_PORT` (gap 154 relayed to Screen, cal offset 155 stored).
 
 **Functions**
-- `sendUint16(uint16_t)` — `'u'` + 2 bytes on Serial2.
+- `sendUint16(uint16_t)` — `'u'` + 2 bytes on `DCO_PORT`.
   - **Called from:** **none (dead)** — only commented site in `encoders.ino`.
-- `sendFloat(float)` — `'t'` + 4 bytes on Serial2.
+- `sendFloat(float)` — `'t'` + 4 bytes on `DCO_PORT`.
   - **Called from:** **none (dead)**.
-- `sendOK()` — `'k'` on Serial2.
+- `sendOK()` — `'k'` on `DCO_PORT`.
   - **Called from:** **none (dead)**.
-- `serial_send_autotune()` — `'a'` + 255 on Serial2 + flush.
+- `serial_send_autotune()` — `'a'` + 255 on `DCO_PORT` + flush.
   - **Called from:** **none (dead)**.
-- `serial_send_signal(byte)` — `'s'` + signal on Serial1.
+- `serial_send_signal(byte)` — `'s'` + signal on `SCREEN_PORT`.
   - **Called from:** `buttons.ino`; `presetStorage.ino` (`loadPreset`); legacy path in `Controls.ino` (`read_encoder_buttons_preset_save`, itself dead).
-  - **When:** Preset / button UI; body under `#ifdef ENABLE_SERIAL1`.
-- `serial_send_param_change(byte, uint16_t, bool)` — `'p'` frame → Serial1 (if `sendToAll`) and/or Serial2.
+  - **When:** Preset / button UI; body under `#ifdef ENABLE_SCREEN_LINK`.
+- `serial_send_param_change(byte, uint16_t, bool)` — `'p'` frame → `SCREEN_PORT` (if `sendToAll`) and/or `DCO_PORT`.
   - **Called from:** many sites in `encoders.ino`, `buttons.ino`, `presetStorage.ino`.
-  - **When:** Encoder/button/preset param TX; `#ifdef ENABLE_SERIAL1/2`.
-- `serial_send_param_change_byte(byte, byte, bool)` — `'w'` frame → Serial1 and/or Serial2.
+  - **When:** Encoder/button/preset param TX; `#ifdef ENABLE_SCREEN_LINK` / `ENABLE_DCO_LINK`.
+- `serial_send_param_change_byte(byte, byte, bool)` — `'w'` frame → `SCREEN_PORT` and/or `DCO_PORT`.
   - **Called from:** many sites in `encoders.ino`, `buttons.ino`, `presetStorage.ino`.
   - **When:** Encoder/button/preset param TX; gated same.
-- `serial_send_preset_name_to_mainboard()` — `'q'` + 8 chars + finish on Serial2.
+- `serial_send_preset_name_to_mainboard()` — `'q'` + 8 chars + finish on `DCO_PORT`.
   - **Called from:** **none (dead)**.
-- `serial_send_preset_scroll(byte, byte[])` — `'q'` + preset # + 16-char name on Serial1.
+- `serial_send_preset_scroll(byte, byte[])` — `'q'` + preset # + 16-char name on `SCREEN_PORT`.
   - **Called from:** `encoders.ino`; `buttons.ino`; `Controls.ino` legacy save path (dead caller).
-  - **When:** Preset scroll / save UI; `#ifdef ENABLE_SERIAL1`.
-- `serial_send_save_char_select(byte)` — `'c'` + char position on Serial1.
+  - **When:** Preset scroll / save UI; `#ifdef ENABLE_SCREEN_LINK`.
+- `serial_send_save_char_select(byte)` — `'c'` + char position on `SCREEN_PORT`.
   - **Called from:** `encoders.ino`; `Controls.ino` legacy save path (dead caller).
-  - **When:** Save-name UI; `#ifdef ENABLE_SERIAL1`.
-- `serialSendParamByteToScreen(byte, byte)` — `'y'` frame on Serial1.
-  - **Called from:** `input_handle_param32_from_mainboard`; `encoders.ino` (manual cal); `buttons.ino` (manual cal).
+  - **When:** Save-name UI; `#ifdef ENABLE_SCREEN_LINK`.
+- `serialSendParamByteToScreen(byte, byte)` — `'y'` frame on `SCREEN_PORT`.
+  - **Called from:** `input_handle_param32_from_dco`; `encoders.ino` (manual cal); `buttons.ino` (manual cal).
   - **When:** Screen-only UI params / cal offset echo.
-- `input_handle_param32_from_mainboard(...)` — Decode `'x'`; apply `PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO` (155) into `manualCalibrationInitAmpCompOffset[]`; may echo offset to Screen.
-  - **Called from:** Serial1 parser via `mainboardSerial1Commands[]` → `serial_parser_process_byte`.
-  - **When:** Serial1 (Screen) RX of PARAM32.
-- `serial_read_from_mainboard()` — Timeout + drain Serial1 into parser (name says mainboard; port is Serial1 → Screen link).
+- `serial_forward_param32_to_screen(const uint8_t*, uint8_t)` — Rebuild the received PARAM_32 payload as the same 7-byte `'x'` frame and write it to `SCREEN_PORT` (`static`).
+  - **Called from:** `input_handle_param32_from_dco` (gap 154 only).
+  - **When:** Each inbound gap frame; body under `#ifdef ENABLE_SCREEN_LINK`.
+  - Note: TX wait is `while (SCREEN_PORT.availableForWrite() < 1) {}` — on RP2040 hardware UARTs `availableForWrite()` returns only 0 or 1, so waiting for a larger count would block Core1 forever.
+- `input_handle_param32_from_dco(...)` — Decode `'x'`; `PARAM_GAP_FROM_DCO` (154) → forward verbatim to Screen; `PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO` (155) → unpack `[oscIndex:8 | offset:8]` from the low 16 bits into `manualCalibrationInitAmpCompOffset[oscIndex]`; may echo offset to Screen as `PARAM_MANUAL_CALIBRATION_OFFSET` (`static`).
+  - **Called from:** the DCO-link parser via `dcoLinkCommands[]` → `serial_parser_process_byte`.
+  - **When:** `DCO_PORT` RX of PARAM32.
+- `serial_read_from_dco()` — Timeout + drain `DCO_PORT` into `dcoLinkParser` (non-blocking pump for the DCO link).
   - **Called from:** `loop1()` every iteration.
-  - **When:** Every `loop1`; body under `#ifdef ENABLE_SERIAL1`.
+  - **When:** Every `loop1`; body under `#ifdef ENABLE_DCO_LINK`.
 
 ### `Serial2.ino`
 
 Periodic manual-control blocks; legacy flag flusher.
 
 **Functions**
-- `serial_send_manual_controls(bool presetLoading)` — When manual flags or preset load: send `'a'`/`'b'` (exp ADSR on Serial2, linear on Serial1), `'c'` ADSR3, `'d'` filter block, `'e'` ADSR1→VCA, `'f'` PW on Serial2. Comments say “DCO”; Serial2 peer is **Mainboard**.
+- `serial_send_manual_controls(bool presetLoading)` — When manual flags or preset load: send `'a'`/`'b'` (exp ADSR on `DCO_PORT`, linear on `SCREEN_PORT`), `'c'` ADSR3, `'d'` filter block, `'e'` ADSR1→VCA, `'f'` PW on `DCO_PORT`.
   - **Called from:** `loop1()` when `timer1msFlag2`; `loadPreset()` in `presetStorage.ino`.
   - **When:** Soft timer Core1 ~1 ms; preset load.
-- `sendSerial()` — Flag-driven legacy Serial2 cmds (`'r'`,`'t'`,`'y'`,`'z'`,`'l'`,`'m'`,`'b'`,`'s'`,`'w'`,`'c'`). Comment says “to DCO” (wrong peer name).
+- `sendSerial()` — Flag-driven legacy `DCO_PORT` cmds (`'r'`,`'t'`,`'y'`,`'z'`,`'l'`,`'m'`,`'b'`,`'s'`,`'w'`,`'c'`) to the DCO.
   - **Called from:** **none (dead)** — only `// sendSerial();` in `loop1`.
   - Note: flags still **set** from `encoders.ino` (`serial_send_oscSyncModeFlag`), `buttons.ino` (`serial_send_LFO1toDCOWaveChangeFlag`, `serialSendADSR3ToOscSelectFlag`), `loop1` (`serialSendADSR3ControlValuesFlag`) — those TX branches never run until `sendSerial()` is re-enabled. Most params already use `serial_send_param_change(_byte)` instead.
+  - Every branch gates on `availableForWrite() >= 1`, not on the frame length: a hardware UART returns 0 or 1, so the old `> 1` / `> 2` / `> 4` gates could never pass and would have dropped every frame once re-enabled. A full FIFO leaves the flag set for the next call.
 
 ### `param_router.h`
 
@@ -196,11 +204,11 @@ Generic non-blocking frame parser.
   - **Called from:** `serial_parser_process_byte`.
   - **When:** First byte of frame.
 - `serial_parser_check_timeout()` — Drop stale partial frames.
-  - **Called from:** `serial_read_from_mainboard`.
+  - **Called from:** `serial_read_from_dco`.
   - **When:** Before draining UART if mid-payload.
 - `serial_parser_process_byte()` — State machine; invoke `on_frame` when complete.
-  - **Called from:** `serial_read_from_mainboard`.
-  - **When:** Each Serial1 RX byte.
+  - **Called from:** `serial_read_from_dco`.
+  - **When:** Each `DCO_PORT` RX byte.
 
 ### `serial_param_protocol.h`
 
@@ -212,12 +220,12 @@ Generic non-blocking frame parser.
 - `decode_param_p()` / `decode_param_w()` — Fill `ParamFrame` for `'p'`/`'w'`.
   - **Called from:** **none (dead)** in this firmware (docs / other boards).
 - `decode_param_x()` — Fill `ParamFrame` for `'x'`.
-  - **Called from:** `input_handle_param32_from_mainboard`.
-  - **When:** Serial1 PARAM32 RX.
+  - **Called from:** `input_handle_param32_from_dco`.
+  - **When:** `DCO_PORT` PARAM32 RX.
 
 ### `serial_protocol.h`
 
-Shared mainboard↔DCO command enums / payload lengths (copied for ParamId overlap).
+Shared DCO-link command enums / payload lengths (copied for ParamId overlap); `'x'` PARAM_32 is the one used here.
 
 **Functions**
 - `serial_protocol_payload_len(char)` — Map cmd → size.
@@ -225,7 +233,7 @@ Shared mainboard↔DCO command enums / payload lengths (copied for ParamId overl
 
 ### `serial_input_protocol.h`
 
-Input→mainboard command enums / sizes (`'a'`–`'f'`,`'p'`,`'w'`,`'q'`). **Not `#include`d by any `.ino`/`.h` in this repo.**
+Legacy input→mainboard command enums / sizes (`'a'`–`'f'`,`'p'`,`'w'`,`'q'`). **Not `#include`d by any `.ino`/`.h` in this repo.**
 
 **Functions**
 - `input_serial_payload_len(char)` — Map cmd → size.
@@ -259,7 +267,7 @@ Init/scan muxes; map faders/pots → synth params; legacy preset-save UI; unused
 - `read_digitalMux(bool readPots)` — Scan 3×16 digital mux channels; optionally sample analog SIG.
   - **Called from:** `readControls()` every iteration (`readPots=1` on 1 ms, else 0).
   - **When:** Every `loop`.
-- `read_encoders_preset_save()` — Legacy char-select encoder for save UI + Serial1 updates.
+- `read_encoders_preset_save()` — Legacy char-select encoder for save UI + Screen updates.
   - **Called from:** **none (dead)** — only `// read_encoders_preset_save()` in `readControls`.
 - `read_encoder_buttons_preset_save()` — Legacy save-button UI + signals.
   - **Called from:** **none (dead)** — only commented in `readControls`.
@@ -318,7 +326,7 @@ Encoder action enums and `encoders[]` / calibration/menu action tables. **No fun
 
 ### `LED_control.h`
 
-74HC595 pins (`PIN_DATA` 11, `PIN_LATCH` 12, `PIN_CLK` 13), `PIN_LED_PWM` **5**, LED pin remap / state arrays. **No function definitions.**
+74HC595 pins (`PIN_DATA` 11, `PIN_LATCH` 12, `PIN_CLK` 13), `PIN_LED_PWM` **6**, LED pin remap / state arrays. **No function definitions.**
 
 ### `LED_control.ino`
 
@@ -388,7 +396,7 @@ Kalman filter bank, `linToExpLookup[4096]`, inline math helpers.
 **Functions** (inline in header)
 - `mapFloat(...)` — Float map.
   - **Called from:** **none (dead)**.
-- `linearToExponential(...)` — Lin→exp for ADSR Serial2 mapping table.
+- `linearToExponential(...)` — Lin→exp for the ADSR values sent to the DCO.
   - **Called from:** `init_tables()`.
   - **When:** Boot Core0.
 
@@ -424,14 +432,14 @@ All detailed docs live under `docs/` (this file included). Root `README.md` is t
 |------|--------|---------|
 | `README.md` (repo root) | Current | Overview / build / doc index. |
 | `docs/SYSTEM_OVERVIEW.md` | Current | Stub pointing to DCO4_DCO canonical overview (+ local UART table). |
-| `docs/CONTROL_PIPELINE.md` | Current | Mux/encoder/button → params → Serial1/2 path. |
+| `docs/CONTROL_PIPELINE.md` | Current | Mux/encoder/button → params → DCO / Screen path. |
 | `docs/PANEL_AND_PINS.md` | Current | Panel mux / encoder / LED / UART pin map. |
 | `docs/PRESETS.md` | Current | LittleFS bank layout, load/save. |
 | `docs/REFERENCE_AI.md` | Current | Deep semantic map. |
 | `docs/FILE_INDEX.md` | Current | This file — files, functions, call sites. |
 | `docs/README_serial_and_params.md` | Current | Shared serial / ParamId how-to. |
 
-**Pin conflict (firmware):** `PIN_LED_PWM` (`LED_control.h`) and `Serial2.setRX` (`setup1`) both use **GPIO 5**. `analogWrite` on 5 can steal UART RX. Current firmware primarily *writes* Serial2; RX on Serial2 is unused in live paths reviewed here.
+**GPIO 5 (no conflict):** `PIN_LED_PWM` (`LED_control.h`) is **GPIO 5**, and the `analogWrite` in `setup1()` takes the pin back from `SCREEN_PORT.setRX(5)`. Nothing is lost: GP5 has no conductor and the Screen never transmits. The DCO's `'x'` frames (gap 154, cal offset 155) arrive on `DCO_PORT` RX, **GPIO 1**.
 
 ---
 
@@ -455,8 +463,8 @@ All detailed docs live under `docs/` (this file included). Root `README.md` is t
 |------|------------|
 | Boot / dual-core split | `DCO4_Input_Controller.ino` (`setup` / `setup1` / `loop` / `loop1`) |
 | UART peers, baud, pins | `setup1()` + `Serial.h` `ENABLE_*` |
-| Serial2 (Mainboard) TX blocks `'a'`–`'f'` | `Serial2.ino` `serial_send_manual_controls` |
-| Serial1 (Screen) signals / scroll / `'y'` | `Serial.ino` (`serial_send_signal`, `serial_send_preset_scroll`, `serialSendParamByteToScreen`) |
+| DCO TX blocks `'a'`–`'f'` | `Serial2.ino` `serial_send_manual_controls` (writes `DCO_PORT`) |
+| Screen signals / scroll / `'y'` | `Serial.ino` (`serial_send_signal`, `serial_send_preset_scroll`, `serialSendParamByteToScreen`) |
 | Param `'p'`/`'w'` TX | `serial_send_param_change` / `_byte` from `encoders.ino` / `buttons.ino` / `presetStorage.ino` |
 | New ParamId | `params_def.h` + encoder/button/preset TX sites (no local `apply_param_*` table) |
 | Fader/pot → ADSR/VCF/VCA/PW | `Controls.ino` `setControlValues` |
@@ -464,9 +472,9 @@ All detailed docs live under `docs/` (this file included). Root `README.md` is t
 | Button → action map | `buttons.h` `buttons[]` + `buttons.ino` switch |
 | Encoder → action map | `encoders.h` `encoders[]` + `encoders.ino` |
 | Soft timer rates | `Timers_millis.ino` |
-| Panel LEDs / brightness PWM pin | `LED_control.h` / `LED_control.ino` (+ GPIO 5 vs Serial2 RX) |
-| ADSR lin→exp for Serial2 | `auxiliary.ino` / `linearToExponential` / use in `Serial2.ino` |
+| Panel LEDs / brightness PWM pin | `LED_control.h` / `LED_control.ino` (`PIN_LED_PWM` GPIO 5) |
+| ADSR lin→exp for the DCO | `auxiliary.ino` / `linearToExponential` / use in `Serial2.ino` |
 | Preset layout / load/save | `presetStorage.ino` + `FS.h` |
-| RX cal offset from link | `Serial.ino` `serial_read_from_mainboard` + `input_handle_param32_from_mainboard` |
-| Legacy flag Serial2 TX | Re-enable `sendSerial()` in `loop1` **or** remove stale flag sets |
+| RX DCO `'x'` (gap 154 relay / cal offset 155) | `Serial.ino` `serial_read_from_dco` + `input_handle_param32_from_dco` (+ `serial_forward_param32_to_screen`) |
+| Legacy flag-driven DCO TX | Re-enable `sendSerial()` in `loop1` **or** remove stale flag sets |
 | Formulas / inbound param router | Currently dead: `formulas.*`, `params.ino`, `param_router.h` |

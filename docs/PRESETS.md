@@ -1,6 +1,6 @@
 # Input Controller — presets (LittleFS)
 
-Preset ownership for DCO4 lives on the **Input Controller** (not Mainboard `flashData`, which is inactive).
+Preset ownership for DCO4 lives on the **Input Controller** (the old Mainboard preset store is archived).
 
 ---
 
@@ -21,7 +21,7 @@ Preset ownership for DCO4 lives on the **Input Controller** (not Mainboard `flas
 
 ## Name field
 
-Within each 140-byte slot, name characters are at offsets **119..130** (12 chars used in load/save UI; Screen `'q'` sends 16 bytes; Mainboard `'q'` gets first 8).
+Within each 140-byte slot, name characters are at offsets **119..130** (12 chars used in load/save UI; Screen `'q'` sends 16 bytes; the legacy Mainboard `'q'` used only the first 8).
 
 Helpers: `load_preset_name`, `get_preset_name`.
 

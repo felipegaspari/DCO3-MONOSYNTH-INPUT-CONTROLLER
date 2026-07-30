@@ -61,20 +61,22 @@ void setup1() {
 #ifdef ENABLE_SERIAL
   Serial.begin(2000000);
 #endif
-#ifdef ENABLE_SERIAL1
-  Serial1.setRX(1);
-  Serial1.setTX(0);
-  Serial1.setPollingMode(true);
-  Serial1.setFIFOSize(512);
-  Serial1.begin(2500000);
+#ifdef ENABLE_DCO_LINK
+  // Serial1: TX GP0 -> DCO GP21, RX GP1 <- DCO GP20
+  DCO_PORT.setRX(1);
+  DCO_PORT.setTX(0);
+  DCO_PORT.setPollingMode(true);
+  DCO_PORT.setFIFOSize(512);
+  DCO_PORT.begin(2500000);
 #endif
 
-#ifdef ENABLE_SERIAL2
-  Serial2.setRX(5);
-  Serial2.setTX(4);
-  Serial2.setPollingMode(true);
-  Serial2.setFIFOSize(512);
-  Serial2.begin(2500000);
+#ifdef ENABLE_SCREEN_LINK
+  // Serial2: TX GP4 -> Screen GP13; RX GP5 unwired
+  SCREEN_PORT.setRX(5);
+  SCREEN_PORT.setTX(4);
+  SCREEN_PORT.setPollingMode(true);
+  SCREEN_PORT.setFIFOSize(512);
+  SCREEN_PORT.begin(2500000);
 #endif
 
   init_LED_control();
@@ -83,13 +85,15 @@ void setup1() {
 
 
 
+  // GP5 ends up a PWM output here, which takes it back from the setRX(5) above.
+  // Costs nothing: GP5 has no conductor, and the Screen never transmits.
   pinMode(PIN_LED_PWM, OUTPUT);
   analogWriteFreq(200000);
   analogWrite(PIN_LED_PWM, 245);
 }
 
 void loop1() {
-  // Core1: map manual controls, TX blocks, LED refresh, DCO Serial2 'x' relay.
+  // Core1: map manual controls, TX blocks, LED refresh, DCO 'x' relay.
 
   unsigned long loopStartMicros = micros();
 
@@ -125,7 +129,7 @@ void loop1() {
     //serial_send_param_change(15, ADSR3toDETUNE1_formula * 100000);
     //Serial.println(tiempodeejecuciontotal);
   }
-  // DCO hub: Serial2 RX — forward gap 154 to Screen; store cal offset 155
+  // DCO hub RX (GP1) — forward gap 154 to the Screen; store cal offset 155
   serial_read_from_dco();
 }
 

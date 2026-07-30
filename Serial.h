@@ -2,8 +2,14 @@
 #define __SERIAL_H__
 
 #define ENABLE_SERIAL
-#define ENABLE_SERIAL1
-#define ENABLE_SERIAL2
+
+// Wiring (do not infer the peer from the port number):
+//   Serial1  TX GP0 -> DCO GP21    | RX GP1 <- DCO GP20
+//   Serial2  TX GP4 -> Screen GP13 | RX GP5 unwired (Screen never transmits)
+#define ENABLE_DCO_LINK
+#define ENABLE_SCREEN_LINK
+#define DCO_PORT    Serial1
+#define SCREEN_PORT Serial2
 
 #include "serial_param_protocol.h"
 #include "serial_protocol.h"
@@ -13,8 +19,7 @@
 // can understand this header in isolation.
 typedef unsigned char byte;
 
-void serial_read_from_mainboard();  // legacy name; pumps Serial1 (unused for DCO hub)
-void serial_read_from_dco();        // Serial2 RX: DCO 'x' (154 forward, 155 store)
+void serial_read_from_dco();  // DCO_PORT RX (GP1 <- DCO GP20): DCO 'x' (154 forward, 155 store)
 
 float freq;
 

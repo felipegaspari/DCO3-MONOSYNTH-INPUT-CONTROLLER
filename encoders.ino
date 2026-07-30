@@ -501,7 +501,7 @@ void read_encoders() {
           }
           manualCalibrationStage = constrain(manualCalibrationStage, 0, 5);  // 3 oscs × 2 (SAW+pulse)
           uint8_t index = (uint8_t)manualCalibrationStage / 2;
-          // Notify mainboard/DCO of the new manual calibration stage + its
+          // Notify the DCO of the new manual calibration stage + its
           // per-oscillator offset so the DCO uses the correct value.
           serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_STAGE,
                                         (uint8_t)manualCalibrationStage,
@@ -529,7 +529,7 @@ void read_encoders() {
             manualCalibrationInitAmpCompOffset[index] = manualCalibrationInitAmpCompOffset[index] - 1;
           }
           manualCalibrationInitAmpCompOffset[index] = constrain(manualCalibrationInitAmpCompOffset[index], -20, 20);
-          // Forward updated offset to mainboard/DCO.
+          // Forward updated offset to the DCO.
           serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_OFFSET,
                                         (uint8_t)manualCalibrationInitAmpCompOffset[index],
                                         /*sendToAll=*/false);

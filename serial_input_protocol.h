@@ -4,20 +4,20 @@
 #include <stdint.h>
 
 // -----------------------------------------------------------------------------
-// Serial8 input protocol: command byte definitions and payload sizes.
+// Input-board → hub protocol: command byte definitions and payload sizes.
 //
-// This describes the protocol used between the INPUT BOARD MCU and the
-// MAINBOARD over Serial8. All frames have the form:
+// Historically Mainboard Serial8; after absorption the peer is the DCO.
+// All frames have the form:
 //
 //   [1 byte] command character
 //   [N bytes] payload (length depends on command, defined below)
 //
-// The mainboard uses serial_parser.h and this header to parse incoming frames.
+// The hub uses serial_parser.h and this header to parse incoming frames.
 // The input board firmware can include this file to ensure it sends frames
 // with the same command bytes and payload sizes.
 // -----------------------------------------------------------------------------
 
-// Command bytes sent BY the input board TO the mainboard on Serial8.
+// Command bytes sent BY the input board TO the hub.
 //
 //   'a' : ADSR1 block
 //   'b' : ADSR2 block

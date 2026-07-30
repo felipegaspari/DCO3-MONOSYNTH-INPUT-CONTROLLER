@@ -1,6 +1,6 @@
 # Input Controller — control pipeline
 
-How front-panel activity becomes Mainboard / Screen traffic on **DCO4_Input_Controller**.
+How front-panel activity becomes DCO / Screen traffic on **DCO4_Input_Controller**.
 
 ---
 
@@ -21,13 +21,15 @@ flowchart TD
     L1 --> Map["@1ms setControlValues"]
     L1 --> TX["serial_send_manual_controls"]
     L1 --> Led["@31ms LED update"]
-    L1 --> RX["serial_read_from_mainboard"]
+    L1 --> RX["serial_read_from_dco"]
   end
 
   Enc -->|"ParamId / signals / presets"| TX
   Map --> TX
-  TX -->|"Serial2"| MB["Mainboard"]
-  TX -->|"Serial1"| Scr["Screen"]
+  TX -->|"DCO_PORT (GP0)"| MB["DCO"]
+  TX -->|"SCREEN_PORT (GP4)"| Scr["Screen"]
+  MB -->|"'x' 154/155 (GP1)"| RX
+  RX -->|"relay on SCREEN_PORT"| Scr
 ```
 
 ---
@@ -42,30 +44,30 @@ flowchart TD
 | 1 | ~1 ms | Map faders/pots → locals; TX manual blocks |
 | 1 | ~5 ms | May set ADSR3 send flag |
 | 1 | ~31 µs/ms | LED mux update |
-| 1 | always | Inbound `'x'` parser |
+| 1 | always | Inbound DCO `'x'` parser on `DCO_PORT` |
 
 ---
 
-## Outbound: Mainboard (`Serial2`)
+## Outbound: DCO (`DCO_PORT` = `Serial1`, TX GP0 → DCO GP21)
 
-Peer is Mainboard **Serial8** (not the DCO). Older comments saying “to DCO” are wrong for current topology.
+Peer is the **DCO** board (its own `Serial2`, RX GP21) at 2.5 Mbaud. This board is the serial hub, so the Screen is reached only through `SCREEN_PORT`. The old STM32 Mainboard is archived.
 
 | When | Cmd | Content |
 |------|-----|---------|
 | Manual ADSR1 / preset load | `'a'` | 8 bytes A/D/S/R (**exp-mapped** via `linToExpLookup`) |
 | Manual ADSR2 | `'b'` | Same for ADSR2 |
-| Manual ADSR3 | `'c'` | Exp-mapped ADSR3 (Serial2 only) |
+| Manual ADSR3 | `'c'` | Exp-mapped ADSR3 (DCO only) |
 | Manual VCF pots | `'d'` | CUTOFF, RESONANCE, ADSR2toVCF, LFO2toVCF |
 | Manual VCA pot | `'e'` | ADSR1toVCA |
 | Manual PW pot | `'f'` | PW |
 | Encoder/button ParamId | `'p'` / `'w'` | Via `serial_send_param_change*` |
-| Preset name (8 chars) | `'q'` | `serial_send_preset_name_to_mainboard` |
+| Preset name (8 chars) | `'q'` | `serial_send_preset_name_to_mainboard` (**dead**, legacy Mainboard format) |
 
 `serial_send_manual_controls(presetLoading)` gates blocks on the `*ControlManual` flags (or forces all when loading a preset).
 
 ---
 
-## Outbound: Screen (`Serial1`)
+## Outbound: Screen (`SCREEN_PORT` = `Serial2`, TX GP4 → Screen GP13)
 
 | Cmd | Role |
 |-----|------|
@@ -75,13 +77,20 @@ Peer is Mainboard **Serial8** (not the DCO). Older comments saying “to DCO” 
 | `'c'` | Save char-position select |
 | `'y'` | Byte param to screen |
 | `'p'` / `'w'` | When `sendToAll` |
+| `'x'` | Gap 154 relayed verbatim from the DCO (`serial_forward_param32_to_screen`) |
 
 ---
 
 ## Inbound
 
-Live path: `serial_read_from_mainboard()` on **Serial1** handles `'x'` for `PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO` (155).  
-Expected Mainboard link pin is Serial2 RX — see [`SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md) / DCO canonical note.
+Live path: `serial_read_from_dco()` on **`DCO_PORT`** (RX GP1 ← DCO GP20) pumps the parser for DCO `'x'` PARAM_32 frames:
+
+| ParamId | Handling |
+|---------|----------|
+| `PARAM_GAP_FROM_DCO` (154) | Forwarded verbatim as the same 7-byte `'x'` frame to the Screen on `SCREEN_PORT` (`serial_forward_param32_to_screen`) |
+| `PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO` (155) | Low 16 bits unpacked as `[oscIndex:8 \| offset:8]` into `manualCalibrationInitAmpCompOffset[oscIndex]`; echoed to the Screen as `PARAM_MANUAL_CALIBRATION_OFFSET` when manual calibration is showing that oscillator |
+
+The Screen has no direct DCO link, so every gap update reaches it through this relay. `SCREEN_PORT` is TX-only (the Screen never transmits). See [`SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md) / DCO canonical note.
 
 No live `update_parameters` / `paramTable` on this board (`params.ino` commented). Input is primarily a **sender**.
 
