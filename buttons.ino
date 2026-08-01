@@ -219,39 +219,35 @@ void read_encoder_buttons() {
       case BTN_ACTION_NONE:
         break;
       case TG_SAW1:
-        sawStatus = !sawStatus;
-        //digitalWrite(PIN_SAW1, sawStatus);
-
-        serial_send_param_change(ParamId::PARAM_SAW_STATUS, sawStatus);
-        set_LED_Status(0, sawStatus);
+        waveEnable[0][0] = !waveEnable[0][0];
+        serial_send_param_change(ParamId::PARAM_OSC1_SAW_ENABLE, waveEnable[0][0]);
+        set_LED_Status(0, waveEnable[0][0]);
         break;
       case TG_SAW2:
-        saw2Status = !saw2Status;
-        //digitalWrite(PIN_SAW2, saw2Status);
-        serial_send_param_change_byte(ParamId::PARAM_SAW2_STATUS, saw2Status);
-        set_LED_Status(3, saw2Status);
+        // Panel button: OSC1 Pulse (analog via DG411)
+        waveEnable[0][1] = !waveEnable[0][1];
+        serial_send_param_change_byte(ParamId::PARAM_OSC1_PULSE_ENABLE, waveEnable[0][1]);
+        set_LED_Status(3, waveEnable[0][1]);
         break;
       case TG_TRI:
-        triStatus = !triStatus;
-        //digitalWrite(PIN_TRI, triStatus);
-        serial_send_param_change_byte(ParamId::PARAM_TRI_STATUS, triStatus);
-        set_LED_Status(2, triStatus);
+        waveEnable[0][2] = !waveEnable[0][2];
+        serial_send_param_change_byte(ParamId::PARAM_OSC1_TRI_ENABLE, waveEnable[0][2]);
+        set_LED_Status(2, waveEnable[0][2]);
         break;
       case TG_SIN:
-        sineStatus = !sineStatus;
-        //digitalWrite(PIN_SIN, sineStatus);
-        serial_send_param_change_byte(ParamId::PARAM_SINE_STATUS, sineStatus);
-        //set_LED_Status();
+        // No panel sine; OSC2/3 enables via serial / dco_control for now.
         break;
       case TG_SQR1:
-        sqr1Status = !sqr1Status;
-        serial_send_param_change_byte(ParamId::PARAM_SQR1_STATUS, sqr1Status);
-        set_LED_Status(1, sqr1Status);
+        // Panel key remapped: OSC2 Pulse (analog via DG411)
+        waveEnable[1][1] = !waveEnable[1][1];
+        serial_send_param_change_byte(ParamId::PARAM_OSC2_PULSE_ENABLE, waveEnable[1][1]);
+        set_LED_Status(1, waveEnable[1][1]);
         break;
       case TG_SQR2:
-        sqr2Status = !sqr2Status;
-        serial_send_param_change_byte(ParamId::PARAM_SQR2_STATUS, sqr2Status);
-        set_LED_Status(4, sqr2Status);
+        // Panel key remapped: OSC3 Pulse (analog via DG411)
+        waveEnable[2][1] = !waveEnable[2][1];
+        serial_send_param_change_byte(ParamId::PARAM_OSC3_PULSE_ENABLE, waveEnable[2][1]);
+        set_LED_Status(4, waveEnable[2][1]);
         break;
 
       case TG_RESO_AMP_COMP:

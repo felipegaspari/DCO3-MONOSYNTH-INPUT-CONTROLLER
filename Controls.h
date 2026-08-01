@@ -91,12 +91,10 @@ uint8_t pot6ArrayPos = 10;
 uint8_t pot7ArrayPos;
 uint8_t pot8ArrayPos;
 
-bool sineStatus = 0;
-bool triStatus = 0;
-bool sawStatus = 0;
-bool saw2Status = 0;
-bool sqr1Status = 0;
-bool sqr2Status = 0;
+// Per-osc analog wave enables: [osc 0..2][wave 0=Saw, 1=Pulse, 2=Tri]
+bool waveEnable[3][3] = { { false, false, false },
+                          { false, false, false },
+                          { false, false, false } };
 bool SUBStatus = 1;
 byte waveStatus;
 

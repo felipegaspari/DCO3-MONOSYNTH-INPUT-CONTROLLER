@@ -17,7 +17,7 @@ All detailed documentation lives under **[`docs/`](docs/)**. This README is the 
 | [`docs/SYSTEM_OVERVIEW.md`](docs/SYSTEM_OVERVIEW.md) | Current | Stub → canonical three-board overview + local UART table |
 | [`docs/CONTROL_PIPELINE.md`](docs/CONTROL_PIPELINE.md) | Current | Dual-core scan → ParamId / `'a'..'f'` → DCO & Screen; DCO `'x'` relay |
 | [`docs/PANEL_AND_PINS.md`](docs/PANEL_AND_PINS.md) | Current | Mux, fader/pot indices, LED/UART pins |
-| [`docs/PRESETS.md`](docs/PRESETS.md) | Current | LittleFS bank, 140-byte slots, load/save |
+| [`docs/PRESETS.md`](docs/PRESETS.md) | Current | LittleFS bank, 180-byte slots (v1), load/save |
 | [`docs/FILE_INDEX.md`](docs/FILE_INDEX.md) | Current | Every file + functions + call sites |
 | [`docs/REFERENCE_AI.md`](docs/REFERENCE_AI.md) | Current | Deep semantic map for developers / AI |
 | [`docs/README_serial_and_params.md`](docs/README_serial_and_params.md) | Current | Shared serial / ParamId how-to |
@@ -32,7 +32,7 @@ All detailed documentation lives under **[`docs/`](docs/)**. This README is the 
 - **Encoders:** 11× `MD_REncoder` with layered actions (normal / alt / preset / cal / menu).
 - **Buttons:** Wave toggles, LFO, voice mode, manual fader/pot enable, preset load/save, function key, calibration UI.
 - **LEDs:** Dual 74HC595 status indicators + PWM brightness.
-- **Presets:** 256 × 140-byte LittleFS bank (`presetBank1`).
+- **Presets:** 256 × 180-byte LittleFS bank (`presetBank1`; migrates legacy 140-byte slots).
 - **Hub relay:** inbound DCO `'x'` gap (154) forwarded verbatim to the Screen; cal offset (155) stored locally.
 - **Serial:** 2.5 Mbaud to the DCO (`Serial1` / `DCO_PORT`, bidirectional) and Screen (`Serial2` / `SCREEN_PORT`, TX only); USB Serial @ 2 Mbaud debug.
 

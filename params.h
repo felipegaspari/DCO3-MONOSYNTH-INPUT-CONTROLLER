@@ -31,6 +31,24 @@ int16_t aftertouch = 0;
 int16_t portamentoTime = 0;
 byte portamentoMode = 0;
 
+// Patch params persisted in preset format v1 (bytes 140..179)
+uint8_t filterMode = 0;
+uint8_t softSync = 0;
+uint8_t subOscDivide = 0;
+uint16_t distDrive = 0;
+uint16_t distMix = 0;
+constexpr uint8_t MOD_SLOT_COUNT_INPUT = 8;
+constexpr uint8_t MOD_SLOT_EMPTY = 0xFF;
+uint8_t modSlotSource[MOD_SLOT_COUNT_INPUT] = {
+  MOD_SLOT_EMPTY, MOD_SLOT_EMPTY, MOD_SLOT_EMPTY, MOD_SLOT_EMPTY,
+  MOD_SLOT_EMPTY, MOD_SLOT_EMPTY, MOD_SLOT_EMPTY, MOD_SLOT_EMPTY
+};
+uint8_t modSlotDest[MOD_SLOT_COUNT_INPUT] = {
+  MOD_SLOT_EMPTY, MOD_SLOT_EMPTY, MOD_SLOT_EMPTY, MOD_SLOT_EMPTY,
+  MOD_SLOT_EMPTY, MOD_SLOT_EMPTY, MOD_SLOT_EMPTY, MOD_SLOT_EMPTY
+};
+int16_t modSlotDepth[MOD_SLOT_COUNT_INPUT] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
 float VCAResonanceCompensation = 0;
 bool RESONANCEAmpCompensation = true;
 

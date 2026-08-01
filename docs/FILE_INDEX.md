@@ -343,19 +343,19 @@ Encoder action enums and `encoders[]` / calibration/menu action tables. **No fun
 
 ### `FS.h`
 
-LittleFS preset bank sizes (`NUM_PRESETS` 256, `flashPresetSize` 140) + buffers. **No function definitions.**
+LittleFS preset bank sizes (`NUM_PRESETS` 256, `flashPresetSize` 180, legacy 140) + format version + buffers. **No function definitions.** See [`PRESETS.md`](PRESETS.md).
 
 ### `presetStorage.ino`
 
-Load/save presets from LittleFS; push full param set over serial.
+Load/save presets from LittleFS; push full param set over serial (incl. mod matrix, dist, filter mode, soft sync, sub-osc, porta mode).
 
 **Functions**
-- `initFS()` — Mount LittleFS; load bank into RAM; `loadPreset(1)`.
+- `initFS()` — Mount LittleFS; migrate 256×140 → 256×180 if needed; load bank into RAM; `loadPreset(1)`.
   - **Called from:** `setup1()`.
   - **When:** Boot Core1.
-- `load_preset_name(byte)` — Copy 12 name bytes from bank into `presetName`.
+- `load_preset_name(byte)` — Copy 12 name bytes from bank into `loadedName`.
   - **Called from:** **none (dead)**.
-- `loadPreset(uint16_t)` — Unpack slot into globals; TX all params + `serial_send_manual_controls(true)`; refresh LEDs.
+- `loadPreset(uint16_t)` — Unpack slot into globals (v1 tail when `flashData[2] >= 1`); TX all params + `serial_send_manual_controls(true)`; refresh LEDs.
   - **Called from:** `initFS`; `encoders.ino` (preset select confirm).
   - **When:** Boot; encoder load.
 - `dumpPresetBankToSerial()` — USB dump of entire bank.
@@ -363,12 +363,12 @@ Load/save presets from LittleFS; push full param set over serial.
 - `get_preset_name(byte, byte(&)[16])` — Fill 16-char name array for scroll UI.
   - **Called from:** `encoders.ino`.
   - **When:** Preset scroll.
-- `writePreset(uint16_t)` — Pack globals + write LittleFS slot.
+- `writePreset(uint16_t)` — Pack globals (format version 1 + bytes 140..179) + write LittleFS slot.
   - **Called from:** `buttons.ino` (save confirm).
   - **When:** Button save.
-- `writePresetActions(uint16_t)` — Clear manual flags after write.
+- `writePresetActions(uint16_t)` — Clear session manual flags after write.
   - **Called from:** **none (dead)**.
-- `loadPresetActions(uint16_t)` — Clear manual flags after load.
+- `loadPresetActions(uint16_t)` — Clear session manual flags after load.
   - **Called from:** **none (dead)**.
 
 ---

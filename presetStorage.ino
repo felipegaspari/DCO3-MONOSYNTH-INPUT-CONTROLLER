@@ -1,51 +1,84 @@
+// Expand a legacy 140-byte/slot bank already loaded at the start of
+// presetBank1Buffer into 180-byte slots (zero-pad bytes 140..179).
+static void migrate_legacy_preset_bank_in_ram() {
+  for (int16_t p = (int16_t)NUM_PRESETS - 1; p >= 0; --p) {
+    const uint32_t oldOff = (uint32_t)p * LEGACY_FLASH_PRESET_SIZE;
+    const uint32_t newOff = (uint32_t)p * flashPresetSize;
+    memmove(&presetBank1Buffer[newOff], &presetBank1Buffer[oldOff],
+            LEGACY_FLASH_PRESET_SIZE);
+    memset(&presetBank1Buffer[newOff + LEGACY_FLASH_PRESET_SIZE], 0,
+           flashPresetSize - LEGACY_FLASH_PRESET_SIZE);
+  }
+}
+
+static void write_full_preset_bank_file() {
+  fileBank1 = LittleFS.open("presetBank1", "w+");
+  for (uint32_t offset = 0; offset < flashBankSize; ) {
+    uint32_t chunk = flashBankSize - offset;
+    if (chunk > 64) chunk = 64;
+    fileBank1.write(&presetBank1Buffer[offset], chunk);
+    offset += chunk;
+  }
+  fileBank1.flush();
+  fileBank1.close();
+}
+
+static void reset_mod_slots_empty() {
+  for (uint8_t i = 0; i < MOD_SLOT_COUNT_INPUT; ++i) {
+    modSlotSource[i] = MOD_SLOT_EMPTY;
+    modSlotDest[i] = MOD_SLOT_EMPTY;
+    modSlotDepth[i] = 0;
+  }
+}
+
+static void reset_v1_patch_defaults() {
+  filterMode = 0;
+  softSync = 0;
+  subOscDivide = 0;
+  portamentoMode = 0;
+  distDrive = 0;
+  distMix = 0;
+  reset_mod_slots_empty();
+}
+
 // Boot Core1: mount LittleFS presetBank1, load RAM bank, loadPreset(1).
 void initFS() {
   LittleFS.begin();
 
   if (!LittleFS.exists("presetBank1")) {
-    fileBank1 = LittleFS.open("presetBank1", "w+");
-    // Fresh file: initialise RAM bank and on-flash file to zeros.
     memset(presetBank1Buffer, 0, flashBankSize);
-    memset(flashData,          0, flashPresetSize);
-    // Pre-allocate full bank region on flash so high-index presets
-    // can be written safely later.
-    for (uint16_t offset = 0; offset < flashBankSize; ) {
-      uint8_t zeros[64] = {0};
-      uint16_t chunk = (flashBankSize - offset) > sizeof(zeros)
-                       ? sizeof(zeros)
-                       : (flashBankSize - offset);
-      fileBank1.write(zeros, chunk);
-      offset += chunk;
-    }
-    fileBank1.flush();
-    fileBank1.seek(0);
+    memset(flashData, 0, flashPresetSize);
+    write_full_preset_bank_file();
   } else {
     fileBank1 = LittleFS.open("presetBank1", "r+");
-    // Ensure the underlying file is at least flashBankSize bytes long so
-    // we can write any preset index 0..NUM_PRESETS-1 safely.
     uint32_t sz = fileBank1.size();
-    if (sz < flashBankSize) {
-      fileBank1.seek(sz);
-      for (uint32_t offset = sz; offset < flashBankSize; ) {
-        uint8_t zeros[64] = {0};
-        uint32_t chunk = (flashBankSize - offset) > sizeof(zeros)
-                         ? sizeof(zeros)
-                         : (flashBankSize - offset);
-        fileBank1.write(zeros, chunk);
-        offset += chunk;
-      }
-      fileBank1.flush();
-      fileBank1.seek(0);
+
+    if (sz == LEGACY_FLASH_BANK_SIZE) {
+      // One-shot migrate: 256×140 → 256×180, preserve bytes 0..139.
+      memset(presetBank1Buffer, 0, flashBankSize);
+      fileBank1.read(presetBank1Buffer, LEGACY_FLASH_BANK_SIZE);
+      fileBank1.close();
+      migrate_legacy_preset_bank_in_ram();
+      write_full_preset_bank_file();
     } else {
+      if (sz < flashBankSize) {
+        fileBank1.seek(sz);
+        for (uint32_t offset = sz; offset < flashBankSize; ) {
+          uint8_t zeros[64] = {0};
+          uint32_t chunk = (flashBankSize - offset) > sizeof(zeros)
+                           ? sizeof(zeros)
+                           : (flashBankSize - offset);
+          fileBank1.write(zeros, chunk);
+          offset += chunk;
+        }
+        fileBank1.flush();
+      }
       fileBank1.seek(0);
+      fileBank1.read(presetBank1Buffer, flashBankSize);
+      fileBank1.close();
     }
   }
 
-  // Load full bank into RAM buffer.
-  fileBank1.read(presetBank1Buffer, flashBankSize);
-  fileBank1.close();
-
-  // Copy first preset slot into flashData for initial load.
   for (int i = 0; i < flashPresetSize; i++) {
     flashData[i] = presetBank1Buffer[i];
   }
@@ -76,7 +109,7 @@ void load_preset_name(byte destinationPreset) {
   loadedName[11] = presetBank1Buffer[130 + startByteN];
 }
 
-// Unpack presetN from RAM bank into synth locals and re-TX (see loadPresetActions).
+// Unpack presetN from RAM bank into synth locals and re-TX params to DCO/Screen.
 void loadPreset(uint16_t presetN) {
 
   if (presetN >= NUM_PRESETS) {
@@ -86,15 +119,12 @@ void loadPreset(uint16_t presetN) {
   byte unused_data;
   uint16_t unused_data_uint16_t;
 
+  // Session UI flags — not part of the patch sound
   faderRow1ControlManual = false;
   faderRow2ControlManual = false;
   VCFPotsControlManual = false;
   VCAPotsControlManual = false;
   PWMPotsControlManual = false;
-  ADSR3Enabled = false;
-
-  float a;
-  int b;
 
   uint16_t startByteN = presetN * flashPresetSize;
 
@@ -102,18 +132,18 @@ void loadPreset(uint16_t presetN) {
     flashData[i] = presetBank1Buffer[i + startByteN];
   }
 
-  // bits
-  sawStatus = bitRead(flashData[0], 0);
-  saw2Status = bitRead(flashData[0], 1);
-  triStatus = bitRead(flashData[0], 2);
-  sineStatus = bitRead(flashData[0], 3);
-  sqr1Status = bitRead(flashData[0], 4);
-  sqr2Status = bitRead(flashData[0], 5);
+  // bits — OSC1 Saw/Pulse/Tri in flashData[0] 0..2; OSC2/3 in flashData[3]
+  waveEnable[0][0] = bitRead(flashData[0], 0);  // OSC1 Saw
+  waveEnable[0][1] = bitRead(flashData[0], 1);  // OSC1 Pulse
+  waveEnable[0][2] = bitRead(flashData[0], 2);  // OSC1 Tri
+  unused_data = bitRead(flashData[0], 3);       // unused (legacy sine)
+  unused_data = bitRead(flashData[0], 4);       // unused (legacy SQR enable bit)
+  unused_data = bitRead(flashData[0], 5);       // unused (legacy SQR enable bit)
   RESONANCEAmpCompensation = bitRead(flashData[0], 6);
   VCAADSRRestart = bitRead(flashData[0], 7);
 
   VCFADSRRestart = bitRead(flashData[1], 0);
-  PWMPotsControlManual = bitRead(flashData[1], 1);  // makes no sense, should be off after loading or writing presets
+  unused_data = bitRead(flashData[1], 1);       // unused (was PWM pots manual)
   ADSR3Enabled = bitRead(flashData[1], 2);
   unused_data = bitRead(flashData[1], 3);
   unused_data = bitRead(flashData[1], 4);
@@ -121,11 +151,13 @@ void loadPreset(uint16_t presetN) {
   unused_data = bitRead(flashData[1], 6);
   unused_data = bitRead(flashData[1], 7);
 
-  // flashData[2] can carry a tiny per‑preset header / version.
-  // For older presets this will be 0.
   uint8_t presetFormatVersion = flashData[2];
-  (void)presetFormatVersion;  // reserved for future use
-  unused_data = flashData[3];
+  waveEnable[1][0] = bitRead(flashData[3], 0);  // OSC2 Saw
+  waveEnable[1][1] = bitRead(flashData[3], 1);  // OSC2 Pulse
+  waveEnable[1][2] = bitRead(flashData[3], 2);  // OSC2 Tri
+  waveEnable[2][0] = bitRead(flashData[3], 3);  // OSC3 Saw
+  waveEnable[2][1] = bitRead(flashData[3], 4);  // OSC3 Pulse
+  waveEnable[2][2] = bitRead(flashData[3], 5);  // OSC3 Tri
   unused_data = flashData[4];
   unused_data = flashData[5];
 
@@ -164,10 +196,10 @@ void loadPreset(uint16_t presetN) {
 
   // int16_t
   VCFKeytrack = (int16_t)word(flashData[30], flashData[31]);
-  SQR1Level = (int16_t)word(flashData[32], flashData[33]);
-  SQR2Level = (int16_t)word(flashData[34], flashData[35]);
+  OSC1Level = (int16_t)word(flashData[32], flashData[33]);
+  OSC2Level = (int16_t)word(flashData[34], flashData[35]);
   SubLevel = (int16_t)word(flashData[36], flashData[37]);
-  unused_data_uint16_t = word(flashData[38], flashData[39]);
+  OSC3Level = (int16_t)word(flashData[38], flashData[39]);
   LFO1toDCO = (int16_t)word(flashData[40], flashData[41]);
   LFO1Speed = (int16_t)word(flashData[42], flashData[43]);
   LFO2Speed = (int16_t)word(flashData[44], flashData[45]);
@@ -237,6 +269,23 @@ void loadPreset(uint16_t presetN) {
   presetName[14] = flashData[133];
   presetName[15] = flashData[134];
 
+  // Format v1 patch tail (140..179). Version 0 / migrated pads → defaults.
+  reset_v1_patch_defaults();
+  if (presetFormatVersion >= PRESET_FORMAT_VERSION) {
+    filterMode = flashData[140];
+    softSync = flashData[141];
+    subOscDivide = flashData[142];
+    portamentoMode = flashData[143];
+    distDrive = word(flashData[144], flashData[145]);
+    distMix = word(flashData[146], flashData[147]);
+    for (uint8_t s = 0; s < MOD_SLOT_COUNT_INPUT; ++s) {
+      const uint16_t base = 148 + (uint16_t)s * 4;
+      modSlotSource[s] = flashData[base];
+      modSlotDest[s] = flashData[base + 1];
+      modSlotDepth[s] = (int16_t)word(flashData[base + 2], flashData[base + 3]);
+    }
+  }
+
   /**********************************************************************************/
   /////////////////// START NEW STUFF //
 
@@ -244,17 +293,19 @@ void loadPreset(uint16_t presetN) {
 
   delay(10);
 
-  // PWM control Manual off after loading
+  // Session: PWM pots manual always off after load
   serial_send_param_change_byte(ParamId::PARAM_PWM_POTS_CONTROL_MANUAL, 0, false);
-  // ADSR3Enabled OFF
-  serial_send_param_change_byte(ParamId::PARAM_ADSR3_ENABLED, 0, false);
+  serial_send_param_change_byte(ParamId::PARAM_ADSR3_ENABLED, (uint8_t)ADSR3Enabled, false);
 
-  serial_send_param_change_byte(ParamId::PARAM_SAW_STATUS,  (uint8_t)sawStatus,  false);
-  serial_send_param_change_byte(ParamId::PARAM_SAW2_STATUS, (uint8_t)saw2Status, false);
-  serial_send_param_change_byte(ParamId::PARAM_TRI_STATUS,  (uint8_t)triStatus,  false);
-  serial_send_param_change_byte(ParamId::PARAM_SINE_STATUS, (uint8_t)sineStatus, false);
-  serial_send_param_change_byte(ParamId::PARAM_SQR1_STATUS, (uint8_t)sqr1Status, false);
-  serial_send_param_change_byte(ParamId::PARAM_SQR2_STATUS, (uint8_t)sqr2Status, false);
+  serial_send_param_change_byte(ParamId::PARAM_OSC1_SAW_ENABLE,   (uint8_t)waveEnable[0][0], false);
+  serial_send_param_change_byte(ParamId::PARAM_OSC1_PULSE_ENABLE, (uint8_t)waveEnable[0][1], false);
+  serial_send_param_change_byte(ParamId::PARAM_OSC1_TRI_ENABLE,   (uint8_t)waveEnable[0][2], false);
+  serial_send_param_change_byte(ParamId::PARAM_OSC2_SAW_ENABLE,   (uint8_t)waveEnable[1][0], false);
+  serial_send_param_change_byte(ParamId::PARAM_OSC2_PULSE_ENABLE, (uint8_t)waveEnable[1][1], false);
+  serial_send_param_change_byte(ParamId::PARAM_OSC2_TRI_ENABLE,   (uint8_t)waveEnable[1][2], false);
+  serial_send_param_change_byte(ParamId::PARAM_OSC3_SAW_ENABLE,   (uint8_t)waveEnable[2][0], false);
+  serial_send_param_change_byte(ParamId::PARAM_OSC3_PULSE_ENABLE, (uint8_t)waveEnable[2][1], false);
+  serial_send_param_change_byte(ParamId::PARAM_OSC3_TRI_ENABLE,   (uint8_t)waveEnable[2][2], false);
 
   set_LED_Status(16, 0);
 
@@ -279,18 +330,18 @@ delay(2);
   serial_send_param_change_byte(ParamId::PARAM_OSC_SYNC_MODE,   (uint8_t)oscSyncMode,    false);
 
   serial_send_param_change_byte(ParamId::PARAM_PORTAMENTO_TIME, (uint8_t)portamentoTime, false);
+  serial_send_param_change_byte(ParamId::PARAM_PORTAMENTO_MODE, (uint8_t)portamentoMode, false);
 
   serial_send_param_change_byte(ParamId::PARAM_VOICE_MODE,      (uint8_t)voiceMode,      false);
 
 delay(2);
 
-  serial_send_param_change_byte(ParamId::PARAM_ADSR3_TO_OSC_SELECT, (uint8_t)ADSR3ToOscSelect, false);
-
   serial_send_param_change_byte(ParamId::PARAM_VELOCITY_TO_VCF,     (uint8_t)velocityToVCF,    false);
   serial_send_param_change_byte(ParamId::PARAM_VELOCITY_TO_VCA,     (uint8_t)velocityToVCA,    false);
 
-  serial_send_param_change_byte(ParamId::PARAM_SQR1_LEVEL,          (uint8_t)SQR1Level,        true);
-  serial_send_param_change_byte(ParamId::PARAM_SQR2_LEVEL,          (uint8_t)SQR2Level,        true);
+  serial_send_param_change_byte(ParamId::PARAM_OSC1_LEVEL,          (uint8_t)OSC1Level,        true);
+  serial_send_param_change_byte(ParamId::PARAM_OSC2_LEVEL,          (uint8_t)OSC2Level,        true);
+  serial_send_param_change_byte(ParamId::PARAM_OSC3_LEVEL,          (uint8_t)OSC3Level,        true);
   serial_send_param_change_byte(ParamId::PARAM_SUB_LEVEL,           (uint8_t)SubLevel,         true);
 
   serial_send_param_change_byte(ParamId::PARAM_UNISON_DETUNE,       (uint8_t)unisonDetune,     false);
@@ -299,6 +350,18 @@ delay(2);
   serial_send_param_change_byte(ParamId::PARAM_ANALOG_DRIFT_SPREAD, (uint8_t)analogDriftSpread,false);
   
   serial_send_param_change_byte(ParamId::PARAM_SYNC_MODE,           (uint8_t)syncMode,         false);
+  serial_send_param_change_byte(ParamId::PARAM_SOFT_SYNC,           softSync,                 false);
+  serial_send_param_change_byte(ParamId::PARAM_SUBOSC_DIVIDE,       subOscDivide,             false);
+  serial_send_param_change_byte(ParamId::PARAM_FILTER_MODE,         filterMode,               false);
+  serial_send_param_change(ParamId::PARAM_DIST_DRIVE,               distDrive,                false);
+  serial_send_param_change(ParamId::PARAM_DIST_MIX,                 distMix,                  false);
+
+  for (uint8_t s = 0; s < MOD_SLOT_COUNT_INPUT; ++s) {
+    const byte baseId = (byte)(ParamId::PARAM_MOD_SLOT0_SOURCE + s * 3);
+    serial_send_param_change_byte(baseId,       modSlotSource[s], false);
+    serial_send_param_change_byte(baseId + 1,   modSlotDest[s],   false);
+    serial_send_param_change(baseId + 2, (uint16_t)modSlotDepth[s], false);
+  }
 
 delay(2);
 
@@ -435,35 +498,41 @@ void writePreset(uint16_t presetN) {
     return;
   }
 
+  // Session UI flags — cleared locally, not stored as patch sound
   faderRow1ControlManual = false;
   faderRow2ControlManual = false;
   VCFPotsControlManual = false;
   VCAPotsControlManual = false;
   PWMPotsControlManual = false;
-  ADSR3Enabled = false;
 
   uint16_t startByteN = presetN * flashPresetSize;
 
   // bits
-  bitWrite(flashData[0], 0, sawStatus);
-  bitWrite(flashData[0], 1, saw2Status);
-  bitWrite(flashData[0], 2, triStatus);
-  bitWrite(flashData[0], 3, sineStatus);
-  bitWrite(flashData[0], 4, sqr1Status);
-  bitWrite(flashData[0], 5, sqr2Status);
+  bitWrite(flashData[0], 0, waveEnable[0][0]);
+  bitWrite(flashData[0], 1, waveEnable[0][1]);
+  bitWrite(flashData[0], 2, waveEnable[0][2]);
+  bitWrite(flashData[0], 3, 0);
+  bitWrite(flashData[0], 4, 0);  // unused (legacy SQR enable bit)
+  bitWrite(flashData[0], 5, 0);  // unused (legacy SQR enable bit)
   bitWrite(flashData[0], 6, RESONANCEAmpCompensation);
   bitWrite(flashData[0], 7, VCAADSRRestart);
 
   bitWrite(flashData[1], 0, VCFADSRRestart);
-  bitWrite(flashData[1], 1, PWMPotsControlManual);
+  bitWrite(flashData[1], 1, 0);  // unused (was PWM pots manual)
   bitWrite(flashData[1], 2, ADSR3Enabled);
   bitWrite(flashData[1], 3, 0);
   bitWrite(flashData[1], 4, 0);
   bitWrite(flashData[1], 5, 0);
   bitWrite(flashData[1], 6, 0);
   bitWrite(flashData[1], 7, 0);
-  flashData[2] = 0;
+  flashData[2] = PRESET_FORMAT_VERSION;
   flashData[3] = 0;
+  bitWrite(flashData[3], 0, waveEnable[1][0]);
+  bitWrite(flashData[3], 1, waveEnable[1][1]);
+  bitWrite(flashData[3], 2, waveEnable[1][2]);
+  bitWrite(flashData[3], 3, waveEnable[2][0]);
+  bitWrite(flashData[3], 4, waveEnable[2][1]);
+  bitWrite(flashData[3], 5, waveEnable[2][2]);
   flashData[4] = 0;
   flashData[5] = 0;
 
@@ -495,14 +564,14 @@ void writePreset(uint16_t presetN) {
   // int16_t
   flashData[30] = highByte(VCFKeytrack);
   flashData[31] = lowByte(VCFKeytrack);
-  flashData[32] = highByte(SQR1Level);
-  flashData[33] = lowByte(SQR1Level);
-  flashData[34] = highByte(SQR2Level);
-  flashData[35] = lowByte(SQR2Level);
+  flashData[32] = highByte(OSC1Level);
+  flashData[33] = lowByte(OSC1Level);
+  flashData[34] = highByte(OSC2Level);
+  flashData[35] = lowByte(OSC2Level);
   flashData[36] = highByte(SubLevel);
   flashData[37] = lowByte(SubLevel);
-  flashData[38] = highByte(0);
-  flashData[39] = lowByte(0);
+  flashData[38] = highByte(OSC3Level);
+  flashData[39] = lowByte(OSC3Level);
   flashData[40] = highByte(LFO1toDCO);
   flashData[41] = lowByte(LFO1toDCO);
   flashData[42] = highByte(LFO1Speed);
@@ -606,8 +675,28 @@ void writePreset(uint16_t presetN) {
   flashData[133] = presetNameVal[14];
   flashData[134] = presetNameVal[15];
 
-  // byte noiseLevel;
-  // uint16_t aftertouch;
+  // Format v1 patch tail
+  flashData[140] = filterMode;
+  flashData[141] = softSync;
+  flashData[142] = subOscDivide;
+  flashData[143] = portamentoMode;
+  flashData[144] = highByte(distDrive);
+  flashData[145] = lowByte(distDrive);
+  flashData[146] = highByte(distMix);
+  flashData[147] = lowByte(distMix);
+  for (uint8_t s = 0; s < MOD_SLOT_COUNT_INPUT; ++s) {
+    const uint16_t base = 148 + (uint16_t)s * 4;
+    flashData[base] = modSlotSource[s];
+    flashData[base + 1] = modSlotDest[s];
+    flashData[base + 2] = highByte((uint16_t)modSlotDepth[s]);
+    flashData[base + 3] = lowByte((uint16_t)modSlotDepth[s]);
+  }
+  // 135..139 unused padding between name and v1 tail
+  flashData[135] = 0;
+  flashData[136] = 0;
+  flashData[137] = 0;
+  flashData[138] = 0;
+  flashData[139] = 0;
 
   for (int i = 0; i < flashPresetSize; i++) {
     presetBank1Buffer[i + startByteN] = flashData[i];
@@ -631,7 +720,7 @@ void writePreset(uint16_t presetN) {
 
 }
 
-// Post-save UI/state cleanup (clear manual flags, refresh LEDs).
+// Post-save UI/state cleanup (clear session manual flags, refresh LEDs).
 void writePresetActions(uint16_t presetN) {
 
   faderRow1ControlManual = false;
@@ -639,7 +728,6 @@ void writePresetActions(uint16_t presetN) {
   VCFPotsControlManual = false;
   PWMPotsControlManual = false;
   VCAPotsControlManual = false;
-  ADSR3Enabled = false;
 
   presetSaveSelectMode = false;
   presetSaveMode = false;
@@ -650,7 +738,7 @@ void writePresetActions(uint16_t presetN) {
   set_LED_Status(16, 0);
 }
 
-// Post-load UI/state cleanup after unpacking a preset.
+// Post-load UI/state cleanup (session flags only; does not alter patch).
 void loadPresetActions(uint16_t presetN) {
 
   faderRow1ControlManual = false;
@@ -658,7 +746,6 @@ void loadPresetActions(uint16_t presetN) {
   VCFPotsControlManual = false;
   VCAPotsControlManual = false;
   PWMPotsControlManual = false;
-  ADSR3Enabled = false;
 
   currentPreset = presetN;
   presetSelectVal = currentPreset;

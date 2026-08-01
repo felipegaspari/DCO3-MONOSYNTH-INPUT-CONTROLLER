@@ -8,15 +8,12 @@
 #include <stdint.h>
 
 enum ParamId : uint8_t {
-  // --- Oscillator wave enable (mainboard-local) ---------------------
-  PARAM_SAW_STATUS               = 1,   // sawStatus
-  PARAM_SAW2_STATUS              = 2,   // saw2Status
-  PARAM_TRI_STATUS               = 3,   // triStatus
-  PARAM_SINE_STATUS              = 4,   // sineStatus
-
-  // Shared with DCO: 5, 10.. etc
-  PARAM_SQR1_STATUS              = 5,   // sqr1Status
-  PARAM_SQR2_STATUS              = 6,   // sqr2Status (mainboard-local)
+  // --- Per-osc analog wave enables (74HC595 → DG411) ----------------
+  PARAM_OSC1_SAW_ENABLE          = 1,
+  PARAM_OSC1_PULSE_ENABLE        = 2,
+  PARAM_OSC1_TRI_ENABLE          = 3,
+  PARAM_SINE_STATUS              = 4,   // deprecated
+  // 5, 6: unused (were PARAM_SQR1/SQR2_STATUS)
 
   PARAM_RESONANCE_COMPENSATION   = 7,   // RESONANCEAmpCompensation (mainboard-local)
   PARAM_VCA_ADSR_RESTART         = 8,   // VCAADSRRestart (mainboard-local)
@@ -43,9 +40,11 @@ enum ParamId : uint8_t {
   PARAM_VELOCITY_TO_VCF          = 20,  // velocityToVCFVal
   PARAM_VELOCITY_TO_VCA          = 21,  // velocityToVCAVal
   // 22,23,24 are also mainboard-local levels:
-  PARAM_SQR1_LEVEL               = 22,  // SQR1LevelVal
-  PARAM_SQR2_LEVEL               = 23,  // SQR2LevelVal
-  PARAM_SUB_LEVEL                = 24,  // SubLevelVal
+  // Oscillator / sub mix levels (PWM → level VCAs; not per-waveform).
+  PARAM_OSC1_LEVEL               = 22,
+  PARAM_OSC2_LEVEL               = 23,
+  PARAM_SUB_LEVEL                = 24,
+  PARAM_OSC3_LEVEL               = 38,
 
   // --- Shared calibration / voice mode ------------------------------
   PARAM_CALIBRATION_VALUE        = 25,  // calibrationVal (reserved on DCO)
@@ -66,6 +65,9 @@ enum ParamId : uint8_t {
   PARAM_OSC3_INTERVAL            = 33,  // OSC3Interval / OSC3_interval
   PARAM_OSC3_DETUNE_VAL          = 34,  // OSC3Detune / OSC3DetuneVal
   PARAM_LFO2_TO_DETUNE3          = 35,  // LFO2toOSC3DETUNE / LFO2toDETUNE3
+
+  PARAM_SOFT_SYNC                = 36,
+  PARAM_SUBOSC_DIVIDE            = 37,
 
   // --- LFO routing (shared) -----------------------------------------
   PARAM_LFO1_TO_DCO              = 40,
@@ -97,6 +99,39 @@ enum ParamId : uint8_t {
   // FX placeholders (voice-aux). IDs reserved; not wired yet.
   // PARAM_FX_PROGRAM             = 55,
   // PARAM_FX_MIX                 = 56,
+
+  // Mod matrix: 8 slots × (source, dest, depth). See DCO/docs/MOD_MATRIX.md.
+  PARAM_MOD_SLOT0_SOURCE         = 60,
+  PARAM_MOD_SLOT0_DEST           = 61,
+  PARAM_MOD_SLOT0_DEPTH          = 62,
+  PARAM_MOD_SLOT1_SOURCE         = 63,
+  PARAM_MOD_SLOT1_DEST           = 64,
+  PARAM_MOD_SLOT1_DEPTH          = 65,
+  PARAM_MOD_SLOT2_SOURCE         = 66,
+  PARAM_MOD_SLOT2_DEST           = 67,
+  PARAM_MOD_SLOT2_DEPTH          = 68,
+  PARAM_MOD_SLOT3_SOURCE         = 69,
+  PARAM_MOD_SLOT3_DEST           = 70,
+  PARAM_MOD_SLOT3_DEPTH          = 71,
+  PARAM_MOD_SLOT4_SOURCE         = 72,
+  PARAM_MOD_SLOT4_DEST           = 73,
+  PARAM_MOD_SLOT4_DEPTH          = 74,
+  PARAM_MOD_SLOT5_SOURCE         = 75,
+  PARAM_MOD_SLOT5_DEST           = 76,
+  PARAM_MOD_SLOT5_DEPTH          = 77,
+  PARAM_MOD_SLOT6_SOURCE         = 78,
+  PARAM_MOD_SLOT6_DEST           = 79,
+  PARAM_MOD_SLOT6_DEPTH          = 80,
+  PARAM_MOD_SLOT7_SOURCE         = 81,
+  PARAM_MOD_SLOT7_DEST           = 82,
+  PARAM_MOD_SLOT7_DEPTH          = 83,
+
+  PARAM_OSC2_SAW_ENABLE          = 84,
+  PARAM_OSC2_PULSE_ENABLE        = 85,
+  PARAM_OSC2_TRI_ENABLE          = 86,
+  PARAM_OSC3_SAW_ENABLE          = 87,
+  PARAM_OSC3_PULSE_ENABLE        = 88,
+  PARAM_OSC3_TRI_ENABLE          = 89,
 
   // --- Misc / control / UI flags -----------------------------------
   // Calibration mode selector (screen/UI only for now)

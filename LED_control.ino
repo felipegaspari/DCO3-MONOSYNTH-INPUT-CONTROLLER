@@ -13,11 +13,11 @@ void set_LED_Status(byte LEDNumber, byte LEDStatus) {
 
   if (LEDNumber == 16) {
 
-    LEDState[0] = sawStatus;
-    LEDState[1] = sqr1Status;
-    LEDState[2] = triStatus;
-    LEDState[3] = saw2Status;
-    LEDState[4] = sqr2Status;
+    LEDState[0] = waveEnable[0][0];  // OSC1 Saw
+    LEDState[1] = waveEnable[1][1];  // OSC2 Pulse (TG_SQR1 key)
+    LEDState[2] = waveEnable[0][2];  // OSC1 Tri
+    LEDState[3] = waveEnable[0][1];  // OSC1 Pulse
+    LEDState[4] = waveEnable[2][1];  // OSC3 Pulse (TG_SQR2 key)
     LEDState[5] = 0;
     LEDState[6] = 0;
     LEDState[7] = VCFPotsControlManual;

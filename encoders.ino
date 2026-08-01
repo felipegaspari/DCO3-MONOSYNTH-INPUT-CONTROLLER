@@ -169,25 +169,25 @@ void read_encoders() {
       case ACTION_SQR1_level:
         if (encoderActionIsSelected) {
           if (direction == DIR_CW) {
-            SQR1Level = SQR1Level + (1 + (1 * speed));
+            OSC1Level = OSC1Level + (1 + (1 * speed));
           } else {
-            SQR1Level = SQR1Level - (1 + (1 * speed));
+            OSC1Level = OSC1Level - (1 + (1 * speed));
           }
-          SQR1Level = constrain(SQR1Level, 0, 127);
+          OSC1Level = constrain(OSC1Level, 0, 127);
         }
-        serial_send_param_change_byte(ParamId::PARAM_SQR1_LEVEL, (uint8_t)SQR1Level);
+        serial_send_param_change_byte(ParamId::PARAM_OSC1_LEVEL, (uint8_t)OSC1Level);
         break;
 
       case ACTION_SQR2_level:
         if (encoderActionIsSelected) {
           if (direction == DIR_CW) {
-            SQR2Level = SQR2Level + (1 + (1 * speed));
+            OSC2Level = OSC2Level + (1 + (1 * speed));
           } else {
-            SQR2Level = SQR2Level - (1 + (1 * speed));
+            OSC2Level = OSC2Level - (1 + (1 * speed));
           }
-          SQR2Level = constrain(SQR2Level, 0, 127);
+          OSC2Level = constrain(OSC2Level, 0, 127);
         }
-        serial_send_param_change_byte(ParamId::PARAM_SQR2_LEVEL, (uint8_t)SQR2Level);
+        serial_send_param_change_byte(ParamId::PARAM_OSC2_LEVEL, (uint8_t)OSC2Level);
         break;
 
       case ACTION_SUB_level:

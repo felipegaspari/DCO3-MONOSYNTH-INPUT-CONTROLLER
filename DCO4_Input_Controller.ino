@@ -15,8 +15,9 @@ float DETUNE2;
 uint16_t PW;
 
 int16_t SubLevel;
-int16_t SQR1Level;
-int16_t SQR2Level;
+int16_t OSC1Level;
+int16_t OSC2Level;
+int16_t OSC3Level;
 
 uint16_t RESONANCE;
 uint16_t CUTOFF = 1024;
