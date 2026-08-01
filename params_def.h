@@ -87,6 +87,17 @@ enum ParamId : uint8_t {
   PARAM_ADSR2_ATTACK_CURVE       = 50,  // ADSR2AttackCurveVal
   PARAM_ADSR2_DECAY_CURVE        = 51,  // ADSR2DecayCurveVal
 
+  // Post-LP distortion CVs (DCO / voice-aux). See DCO/docs/DISTORTION.md, DUAL_MCU.md.
+  PARAM_DIST_DRIVE               = 52,
+  PARAM_DIST_MIX                 = 53,
+
+  // AS3320 multimode select (0..N). Dual-MCU: voice-aux; solo-B: DCO.
+  PARAM_FILTER_MODE              = 54,
+
+  // FX placeholders (voice-aux). IDs reserved; not wired yet.
+  // PARAM_FX_PROGRAM             = 55,
+  // PARAM_FX_MIX                 = 56,
+
   // --- Misc / control / UI flags -----------------------------------
   // Calibration mode selector (screen/UI only for now)
   PARAM_CALIBRATION_MODE         = 101, // "CALIB MODE" on screen
