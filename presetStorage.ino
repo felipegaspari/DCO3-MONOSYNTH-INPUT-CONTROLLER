@@ -41,6 +41,16 @@ static void reset_v1_patch_defaults() {
   reset_mod_slots_empty();
 }
 
+static void reset_v2_patch_defaults() {
+  LFO1toOSC1 = 0;
+  LFO1toOSC2 = 0;
+  LFO1toOSC3 = 0;
+  LFO2toOSC2_coarse = 0;
+  LFO2toOSC3_coarse = 0;
+  env_dco_pitch_centered = 0;
+  characterAmount = 0;
+}
+
 // Boot Core1: mount LittleFS presetBank1, load RAM bank, loadPreset(1).
 void initFS() {
   LittleFS.begin();
@@ -246,11 +256,7 @@ void loadPreset(uint16_t presetN) {
   ADSR3_sustain = word(flashData[108], flashData[109]);
   ADSR3_release = word(flashData[110], flashData[111]);
 
-  unused_data_uint16_t = word(flashData[112], flashData[113]);
-  unused_data_uint16_t = word(flashData[114], flashData[115]);
-  unused_data_uint16_t = word(flashData[116], flashData[117]);
-
-  unused_data = flashData[118];
+  // Bytes 112..118 are format v2 (LFO extras); unpacked below if version >= 2.
 
   presetName[0]  = flashData[119];
   presetName[1]  = flashData[120];
@@ -270,8 +276,9 @@ void loadPreset(uint16_t presetN) {
   presetName[15] = flashData[134];
 
   // Format v1 patch tail (140..179). Version 0 / migrated pads → defaults.
+  // Gate on V1/V2 constants, not PRESET_FORMAT_VERSION, so older banks keep their tails.
   reset_v1_patch_defaults();
-  if (presetFormatVersion >= PRESET_FORMAT_VERSION) {
+  if (presetFormatVersion >= PRESET_FORMAT_V1) {
     filterMode = flashData[140];
     softSync = flashData[141];
     subOscDivide = flashData[142];
@@ -284,6 +291,21 @@ void loadPreset(uint16_t presetN) {
       modSlotDest[s] = flashData[base + 1];
       modSlotDepth[s] = (int16_t)word(flashData[base + 2], flashData[base + 3]);
     }
+  }
+
+  // Format v2: LFO extras + EnvDCO pitch mode + Character. Missing → 0.
+  reset_v2_patch_defaults();
+  if (presetFormatVersion >= PRESET_FORMAT_V2) {
+    LFO1toOSC1 = flashData[112];
+    LFO1toOSC2 = flashData[113];
+    LFO1toOSC3 = flashData[114];
+    LFO2toOSC2_coarse = word(flashData[115], flashData[116]);
+    LFO2toOSC3_coarse = word(flashData[117], flashData[118]);
+    env_dco_pitch_centered = flashData[135] ? 1 : 0;
+    characterAmount = flashData[136];
+    if (characterAmount > 128) characterAmount = 128;
+    if (LFO2toOSC2_coarse > 511) LFO2toOSC2_coarse = 511;
+    if (LFO2toOSC3_coarse > 511) LFO2toOSC3_coarse = 511;
   }
 
   /**********************************************************************************/
@@ -390,6 +412,13 @@ delay(2);
   serial_send_param_change(ParamId::PARAM_OSC3_DETUNE_VAL,  (uint16_t)OSC3Detune,       false);
   serial_send_param_change(ParamId::PARAM_LFO2_TO_OSC2,  (uint16_t)LFO2toOSC2DETUNE, false);
   serial_send_param_change_byte(ParamId::PARAM_LFO2_TO_OSC3, (uint8_t)LFO2toOSC3DETUNE, false);
+  serial_send_param_change_byte(ParamId::PARAM_LFO1_TO_OSC1, LFO1toOSC1, false);
+  serial_send_param_change_byte(ParamId::PARAM_LFO1_TO_OSC2, LFO1toOSC2, false);
+  serial_send_param_change_byte(ParamId::PARAM_LFO1_TO_OSC3, LFO1toOSC3, false);
+  serial_send_param_change(ParamId::PARAM_LFO2_TO_OSC2_COARSE, LFO2toOSC2_coarse, false);
+  serial_send_param_change(ParamId::PARAM_LFO2_TO_OSC3_COARSE, LFO2toOSC3_coarse, false);
+  serial_send_param_change_byte(ParamId::PARAM_CHARACTER, characterAmount, false);
+  serial_send_param_change_byte(ParamId::PARAM_ADSR3_PITCH_MODE, env_dco_pitch_centered, false);
 delay(2);
   serial_send_manual_controls(true);  
   
@@ -649,14 +678,13 @@ void writePreset(uint16_t presetN) {
   flashData[109] = lowByte(ADSR3_sustain);
   flashData[110] = highByte(ADSR3_release);
   flashData[111] = lowByte(ADSR3_release);
-  flashData[112] = highByte(0);
-  flashData[113] = lowByte(0);
-  flashData[114] = highByte(0);
-  flashData[115] = lowByte(0);
-  flashData[116] = highByte(0);
-  flashData[117] = lowByte(0);
-
-  flashData[118] = 0;
+  flashData[112] = LFO1toOSC1;
+  flashData[113] = LFO1toOSC2;
+  flashData[114] = LFO1toOSC3;
+  flashData[115] = highByte(LFO2toOSC2_coarse);
+  flashData[116] = lowByte(LFO2toOSC2_coarse);
+  flashData[117] = highByte(LFO2toOSC3_coarse);
+  flashData[118] = lowByte(LFO2toOSC3_coarse);
 
   ///
   flashData[119] = presetNameVal[0];
@@ -692,9 +720,9 @@ void writePreset(uint16_t presetN) {
     flashData[base + 2] = highByte((uint16_t)modSlotDepth[s]);
     flashData[base + 3] = lowByte((uint16_t)modSlotDepth[s]);
   }
-  // 135..139 unused padding between name and v1 tail
-  flashData[135] = 0;
-  flashData[136] = 0;
+  // Format v2: EnvDCO pitch mode + Character; 137..139 pad
+  flashData[135] = env_dco_pitch_centered ? 1 : 0;
+  flashData[136] = characterAmount;
   flashData[137] = 0;
   flashData[138] = 0;
   flashData[139] = 0;

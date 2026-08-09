@@ -156,11 +156,19 @@ enum ParamId : uint8_t {
   PARAM_UI_CALIBRATION_DISMISS   = 199, // hide calibration UI / dialog
   PARAM_UI_CALIBRATION_MENU_MODE = 200, // enter/exit calibration menu
 
-  // LFO2 coarse pitch (DCO voice engine; relayed over serial).
+  PARAM_PW_VALUE                 = 210,
+
+  // Additive LFO1 pitch depth per osc (stacks on PARAM_LFO1_TO_DCO).
+  PARAM_LFO1_TO_OSC1             = 216,
+  PARAM_LFO1_TO_OSC2             = 217,
+  PARAM_LFO1_TO_OSC3             = 218,
+  // LFO2 coarse pitch per osc (0..511).
   PARAM_LFO2_TO_OSC2_COARSE      = 219,
   PARAM_LFO2_TO_OSC3_COARSE      = 220,
 
-  PARAM_PW_VALUE                 = 210,
+  // Character amount (0..128).
+  PARAM_CHARACTER                = 221,
+
   PARAM_ADSR1_TO_VCA             = 222,
 
   // EnvDCO → pitch tap: 0 unipolar (default), 1 centered ((env−16384)<<1; mid S ≈ note, ±2 oct @ full CW).

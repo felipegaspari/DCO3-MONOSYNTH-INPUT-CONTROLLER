@@ -49,6 +49,15 @@ uint8_t modSlotDest[MOD_SLOT_COUNT_INPUT] = {
 };
 int16_t modSlotDepth[MOD_SLOT_COUNT_INPUT] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
+// Patch params persisted in preset format v2 (bytes 112..118, 135..136)
+uint8_t LFO1toOSC1 = 0;
+uint8_t LFO1toOSC2 = 0;
+uint8_t LFO1toOSC3 = 0;
+uint16_t LFO2toOSC2_coarse = 0;
+uint16_t LFO2toOSC3_coarse = 0;
+uint8_t env_dco_pitch_centered = 0;
+uint8_t characterAmount = 0;
+
 float VCAResonanceCompensation = 0;
 bool RESONANCEAmpCompensation = true;
 

@@ -107,7 +107,7 @@ Live synth/UI parameter globals (ADSR, LFO, voice mode, calibration, manual flag
 
 ### `params_def.h`
 
-Canonical `enum ParamId` (includes `PARAM_PW_VALUE` 210, `PARAM_ADSR1_TO_VCA` 222). **No function definitions.**
+Canonical `enum ParamId` (includes `PARAM_PW_VALUE` 210, LFO extras 216–220, `PARAM_CHARACTER` 221, `PARAM_ADSR1_TO_VCA` 222, `PARAM_ADSR3_PITCH_MODE` 223). **No function definitions.**
 
 ### `tusb_config.h`
 
@@ -329,7 +329,7 @@ Load/save presets from LittleFS; push full param set over serial (incl. mod matr
   - **When:** Boot Core1.
 - `load_preset_name(byte)` — Copy 12 name bytes from bank into `loadedName`.
   - **Called from:** **none (dead)**.
-- `loadPreset(uint16_t)` — Unpack slot into globals (v1 tail when `flashData[2] >= 1`); TX all params + `serial_send_manual_controls(true)`; refresh LEDs.
+- `loadPreset(uint16_t)` — Unpack slot into globals (v1 tail when `flashData[2] >= 1`, v2 extras when `>= 2`); TX all params + `serial_send_manual_controls(true)`; refresh LEDs.
   - **Called from:** `initFS`; `encoders.ino` (preset select confirm).
   - **When:** Boot; encoder load.
 - `dumpPresetBankToSerial()` — USB dump of entire bank.
@@ -337,7 +337,7 @@ Load/save presets from LittleFS; push full param set over serial (incl. mod matr
 - `get_preset_name(byte, byte(&)[16])` — Fill 16-char name array for scroll UI.
   - **Called from:** `encoders.ino`.
   - **When:** Preset scroll.
-- `writePreset(uint16_t)` — Pack globals (format version 1 + bytes 140..179) + write LittleFS slot.
+- `writePreset(uint16_t)` — Pack globals (format version 2 + v1 tail 140..179 + v2 extras 112..118 / 135..136) + write LittleFS slot.
   - **Called from:** `buttons.ino` (save confirm).
   - **When:** Button save.
 - `writePresetActions(uint16_t)` — Clear session manual flags after write.
