@@ -241,7 +241,7 @@ v2 missing (old v1 / zero pad) → defaults 0 via `reset_v2_patch_defaults()`.
 
 - Session UI: fader-row manual, VCF/VCA/PWM pot manual (PWM manual always TX’d 0 on load).
 - Calibration / debug / menu ParamIds (e.g. 101, 120–129, 150+).
-- Panel encoders for 216–221 / 223 — Input has locals and load TX, but no panel editors yet. USB `dco_control` / MIDI edits that never update Input RAM still will not persist: save reads Input locals only. Same as mod/dist/filter until those locals are set before save.
+- Panel encoders for 216–221 / 223 — Input has locals and load TX, but no panel editors yet. USB `dco_control` / MIDI persistable `'p'` IDs are mirrored DCO→Input into the same RAM (ADSR3→PWM wire − 512), so a later panel save stores them. `'a'`–`'d'` ADSR/filter blocks are **not** mirrored (exp vs linear). Save still reads Input locals only.
 
 ---
 

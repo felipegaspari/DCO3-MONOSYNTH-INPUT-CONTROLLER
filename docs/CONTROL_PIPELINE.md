@@ -28,8 +28,8 @@ flowchart TD
   Map --> TX
   TX -->|"DCO_PORT (GP0)"| MB["DCO"]
   TX -->|"SCREEN_PORT (GP4)"| Scr["Screen"]
-  MB -->|"'x' 154/155 (GP1)"| RX
-  RX -->|"relay on SCREEN_PORT"| Scr
+  MB -->|"'x' 154/155 + persistable 'p' (GP1)"| RX
+  RX -->|"relay 'x' 154 / 'p' on SCREEN_PORT"| Scr
 ```
 
 ---
@@ -44,7 +44,7 @@ flowchart TD
 | 1 | ~1 ms | Map faders/pots → locals; TX manual blocks |
 | 1 | ~5 ms | May set ADSR3 send flag |
 | 1 | ~31 µs/ms | LED mux update |
-| 1 | always | Inbound DCO `'x'` parser on `DCO_PORT` |
+| 1 | always | Inbound DCO `'x'` / persistable `'p'` parser on `DCO_PORT` |
 
 ---
 
@@ -84,16 +84,17 @@ Peer is the **DCO** board (its own `Serial2`, RX GP21) at 2.5 Mbaud. This board 
 
 ## Inbound
 
-Live path: `serial_read_from_dco()` on **`DCO_PORT`** (RX GP1 ← DCO GP20) pumps the parser for DCO `'x'` PARAM_32 frames:
+Live path: `serial_read_from_dco()` on **`DCO_PORT`** (RX GP1 ← DCO GP20) pumps the parser for DCO `'x'` PARAM_32 and persistable `'p'` PARAM_16 frames:
 
 | ParamId | Handling |
 |---------|----------|
 | `PARAM_GAP_FROM_DCO` (154) | Forwarded as slim `'x'` (5 B `[id][u32 LE]`) to the Screen on `SCREEN_PORT` (`serial_forward_param32_to_screen`) |
 | `PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO` (155) | Low 16 bits unpacked as `[oscIndex:8 \| offset:8]` into `manualCalibrationInitAmpCompOffset[oscIndex]`; echoed to the Screen as `PARAM_MANUAL_CALIBRATION_OFFSET` when manual calibration is showing that oscillator |
+| `'p'` persistable LittleFS ParamIds | Write Input locals only (`input_handle_param16_from_dco`). ADSR3→PWM (46) stores **wire − 512**. Never re-TX to DCO. Forward the same wire `'p'` to Screen toasts. |
 
-The Screen has no direct DCO link, so every gap update reaches it through this relay. `SCREEN_PORT` is TX-only (the Screen never transmits). See [`SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md) / DCO canonical note.
+The Screen has no direct DCO link, so every gap update and USB/MIDI persistable `'p'` reaches it through this relay. `SCREEN_PORT` is TX-only (the Screen never transmits). See [`SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md) / DCO canonical note.
 
-No live `update_parameters` / `paramTable` on this board (`params.ino` commented). Input is primarily a **sender**.
+No live `update_parameters` / `paramTable` on this board (`params.ino` commented). Input is primarily a **sender**, plus RAM mirror for USB/MIDI persistable IDs.
 
 ---
 

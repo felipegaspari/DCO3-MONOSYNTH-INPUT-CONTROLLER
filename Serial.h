@@ -25,7 +25,7 @@
 // can understand this header in isolation.
 typedef unsigned char byte;
 
-void serial_read_from_dco();  // DCO_PORT RX (GP1 <- DCO GP20): DCO 'x' (154 forward, 155 store)
+void serial_read_from_dco();  // DCO_PORT RX: 'x' 154/155 + persistable 'p' mirror
 void init_dco_link_parser();
 
 float freq;

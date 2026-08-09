@@ -18,10 +18,10 @@ Semantic map of the RP2040 front-panel firmware. Prefer [`FILE_INDEX.md`](FILE_I
 | Panel scan (faders, pots, encoders, buttons) | Voice allocation / DCO pitch |
 | LittleFS preset bank | ADSR/LFO CV generation (DCO) |
 | UART fan-out of controls/params to DCO + Screen | TFT UI (Screen) |
-| Serial hub role: relay DCO gap `'x'` 154 to the Screen | Gap measurement itself (DCO) |
+| Serial hub role: relay DCO gap `'x'` 154 + persistable `'p'` to the Screen | Gap measurement itself (DCO) |
 | Manual-mode continuous control streaming | Amp/PW calibration measurement (DCO) |
 
-Primarily a **protocol sender**, plus a thin relay of DCO `'x'` frames to the Screen. Live inbound apply-router is almost unused (`params.ino` commented).
+Primarily a **protocol sender**, plus inbound DCO `'x'` (gap/cal) and persistable `'p'` mirror (USB/MIDI → LittleFS RAM + Screen toast). Live inbound apply-router is unused (`params.ino` commented); the `'p'` handler writes locals only and does not re-TX to DCO.
 
 ---
 
@@ -29,7 +29,7 @@ Primarily a **protocol sender**, plus a thin relay of DCO `'x'` frames to the Sc
 
 **Core 0:** scan hardware (`readControls` → mux / encoders / buttons). Encoder/button handlers emit ParamIds, UI signals, preset ops.
 
-**Core 1:** map filtered ADC when manual flags set; TX slim LE `'a'`–`'d'` / `'p'` on `DCO_PORT`; LED refresh; parse inbound DCO `'x'` on `DCO_PORT` (`serial_read_from_dco`) and relay gap 154 to the Screen on `SCREEN_PORT`.
+**Core 1:** map filtered ADC when manual flags set; TX slim LE `'a'`–`'d'` / `'p'` on `DCO_PORT`; LED refresh; parse inbound DCO `'x'` / persistable `'p'` on `DCO_PORT` (`serial_read_from_dco`) and relay gap 154 + persistable `'p'` to the Screen on `SCREEN_PORT`.
 
 ---
 
@@ -41,7 +41,7 @@ Primarily a **protocol sender**, plus a thin relay of DCO `'x'` frames to the Sc
 | `encoders.*` | 11 encoders + `EncoderAction` table |
 | `buttons.*` | 16 buttons + mode machine |
 | `LED_control.*` | Dual 595 status LEDs |
-| `Serial.ino` / `Serial2.ino` | TX helpers; manual blocks; inbound DCO `'x'` parser + Screen relay |
+| `Serial.ino` / `Serial2.ino` | TX helpers; manual blocks; inbound DCO `'x'` + persistable `'p'` parser + Screen relay |
 | `presetStorage.ino` / `FS.h` | LittleFS bank |
 | `params_def.h` | Shared IDs (fork may lag the DCO copy — sync carefully) |
 | `Timers_millis.*` | Soft timers for both cores |

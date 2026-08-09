@@ -6,7 +6,7 @@ Shared **inner** serial + ParamId infrastructure. This board is the UART hub: DC
 
 - **DCO** (`DCO_PORT` = `Serial1`, TX GP0 / RX GP1): slim LE `'a'`–`'d'`, `'p'` `[id][i16 LE]`, `'q'` 8 chars. Former `'e'`/`'f'` are `'p'` **222** / **210**. Byte UI params go to DCO as `'p'` (u8 zero-extended).
 - **Screen** (`SCREEN_PORT` = `Serial2`, TX GP4): slim `'a'`/`'b'` linear faders LE, `'p'` when `sendToAll`, Screen-only `'w'`/`'y'`/`'s'`/`'c'`, `'q'` = preset# + 16 chars.
-- Inbound: `serial_read_from_dco()` LUT-drains slim `'x'` (5 B). Gap 154 is relayed as slim `'x'`; cal 155 stored locally. See [`CONTROL_PIPELINE.md`](CONTROL_PIPELINE.md).
+- Inbound: `serial_read_from_dco()` LUT-drains slim `'x'` (5 B) and persistable `'p'` (3 B). Gap 154 is relayed as slim `'x'`; cal 155 stored locally; `'p'` writes LittleFS locals and forwards to Screen toasts (no re-TX to DCO). See [`CONTROL_PIPELINE.md`](CONTROL_PIPELINE.md).
 - UARTs: IRQ (`setPollingMode(false)`), FIFO 512, 2.5 Mbaud. Manual blocks @ 1 ms; encoder `'p'`/`'w'` immediate on Core0.
 - Framing: default RAW. `#define SERIAL_FRAMING_COBS` in `Serial.h` must match DCO/Screen. `SERIAL_INNER_MAX_PAYLOAD` is **17** here (Screen `'q'`). Timeout 500 µs.
 - `params.ino` apply-router is **commented out**; this MCU is primarily a sender.

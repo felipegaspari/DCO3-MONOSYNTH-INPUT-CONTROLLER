@@ -9,7 +9,7 @@ Canonical three-board overview: **[`../../DCO/docs/SYSTEM_OVERVIEW.md`](../../DC
 | Port | Pins (RX / TX) | Baud | Peer |
 |------|----------------|------|------|
 | `Serial` | USB | 2 000 000 | Debug |
-| `Serial1` (`DCO_PORT`) | GP1 / GP0 | 2 500 000 | DCO hub (panel + param TX on GP0; RX `'x'` 154/155 on GP1) |
+| `Serial1` (`DCO_PORT`) | GP1 / GP0 | 2 500 000 | DCO hub (panel + param TX on GP0; RX `'x'` 154/155 + persistable `'p'` on GP1) |
 | `Serial2` (`SCREEN_PORT`) | GP5 / GP4 | 2 500 000 | Screen (UI TX + forwarded gap `'x'` 154 on GP4; GP5 unwired) |
 
 Port numbers say nothing about the peer, so the code addresses both links through the `DCO_PORT` / `SCREEN_PORT` aliases in `Serial.h`.

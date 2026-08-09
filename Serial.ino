@@ -75,7 +75,7 @@ void serialSendParamByteToScreen(byte paramNumber, byte paramValue)
 }
 
 // ---------------------------------------------------------------------------
-// Parser-based receiver for DCO 'x' frames arriving on DCO_PORT RX
+// Parser-based receiver for DCO 'x' / persistable 'p' on DCO_PORT RX
 // (GP1 <- DCO GP20).
 // ---------------------------------------------------------------------------
 
@@ -85,6 +85,19 @@ static void serial_forward_param32_to_screen(const uint8_t* payload, uint8_t len
     return;
   }
   serial_frame_write(SCREEN_PORT, INPUT_CMD_PARAM_32, payload, len);
+#else
+  (void)payload;
+  (void)len;
+#endif
+}
+
+// Relay persistable DCO→Input 'p' mirror to Screen toasts (wire i16, not locals).
+static void serial_forward_param16_to_screen(const uint8_t* payload, uint8_t len) {
+#ifdef ENABLE_SCREEN_LINK
+  if (len != INPUT_SERIAL_LEN_PARAM_16) {
+    return;
+  }
+  serial_frame_write(SCREEN_PORT, INPUT_CMD_PARAM_16, payload, len);
 #else
   (void)payload;
   (void)len;
@@ -130,7 +143,141 @@ static void input_handle_param32_from_dco(char, const uint8_t* payload, uint8_t 
   }
 }
 
+// DCO→Input persistable 'p' mirror (USB/MIDI/dco_control). Write LittleFS
+// locals, forward wire 'p' to Screen toasts. Never re-TX to DCO (loop / Aux).
+static void input_handle_param16_from_dco(char, const uint8_t* payload, uint8_t len) {
+  if (len != INPUT_SERIAL_LEN_PARAM_16) {
+    return;
+  }
+
+  ParamFrame frame;
+  decode_param_p(payload, frame);
+  const uint8_t id = frame.id;
+  const int16_t v  = (int16_t)frame.value;
+
+  if (id >= (uint8_t)ParamId::PARAM_MOD_SLOT0_SOURCE &&
+      id <= (uint8_t)ParamId::PARAM_MOD_SLOT7_DEPTH) {
+    const uint8_t slot  = (uint8_t)((id - (uint8_t)ParamId::PARAM_MOD_SLOT0_SOURCE) / 3);
+    const uint8_t field = (uint8_t)((id - (uint8_t)ParamId::PARAM_MOD_SLOT0_SOURCE) % 3);
+    if (slot < MOD_SLOT_COUNT_INPUT) {
+      if (field == 0) {
+        modSlotSource[slot] = (uint8_t)v;
+      } else if (field == 1) {
+        modSlotDest[slot] = (uint8_t)v;
+      } else {
+        modSlotDepth[slot] = v;
+      }
+    }
+  } else {
+    switch (id) {
+      case ParamId::PARAM_OSC1_SAW_ENABLE:    waveEnable[0][0] = (v != 0); break;
+      case ParamId::PARAM_OSC1_PULSE_ENABLE:  waveEnable[0][1] = (v != 0); break;
+      case ParamId::PARAM_OSC1_TRI_ENABLE:    waveEnable[0][2] = (v != 0); break;
+      case ParamId::PARAM_OSC2_SAW_ENABLE:    waveEnable[1][0] = (v != 0); break;
+      case ParamId::PARAM_OSC2_PULSE_ENABLE:  waveEnable[1][1] = (v != 0); break;
+      case ParamId::PARAM_OSC2_TRI_ENABLE:    waveEnable[1][2] = (v != 0); break;
+      case ParamId::PARAM_OSC3_SAW_ENABLE:    waveEnable[2][0] = (v != 0); break;
+      case ParamId::PARAM_OSC3_PULSE_ENABLE:  waveEnable[2][1] = (v != 0); break;
+      case ParamId::PARAM_OSC3_TRI_ENABLE:    waveEnable[2][2] = (v != 0); break;
+
+      case ParamId::PARAM_RESONANCE_COMPENSATION: RESONANCEAmpCompensation = (v != 0); break;
+      case ParamId::PARAM_VCA_ADSR_RESTART:       VCAADSRRestart = (v != 0); break;
+      case ParamId::PARAM_VCF_ADSR_RESTART:       VCFADSRRestart = (v != 0); break;
+      case ParamId::PARAM_ADSR3_ENABLED:          ADSR3Enabled = (v != 0); break;
+
+      case ParamId::PARAM_ADSR3_TO_OSC_SELECT:
+        ADSR3ToOscSelect = (int8_t)constrain(v, 0, 2);
+        break;
+
+      case ParamId::PARAM_LFO1_WAVEFORM: LFO1Waveform = (int8_t)v; break;
+      case ParamId::PARAM_LFO2_WAVEFORM: LFO2Waveform = (int8_t)v; break;
+
+      case ParamId::PARAM_OSC1_INTERVAL: OSC1Interval = (int8_t)v; break;
+      case ParamId::PARAM_OSC2_INTERVAL: OSC2Interval = (int8_t)v; break;
+      case ParamId::PARAM_OSC3_INTERVAL: OSC3Interval = (int8_t)v; break;
+
+      case ParamId::PARAM_OSC2_DETUNE_VAL: OSC2Detune = v; break;
+      case ParamId::PARAM_OSC3_DETUNE_VAL: OSC3Detune = v; break;
+      case ParamId::PARAM_LFO2_TO_OSC2:    LFO2toOSC2DETUNE = v; break;
+      case ParamId::PARAM_LFO2_TO_OSC3:    LFO2toOSC3DETUNE = v; break;
+
+      case ParamId::PARAM_OSC_SYNC_MODE:   oscSyncMode = (uint16_t)v; break;
+      case ParamId::PARAM_PORTAMENTO_TIME: portamentoTime = v; break;
+      case ParamId::PARAM_PORTAMENTO_MODE: portamentoMode = (byte)v; break;
+      case ParamId::PARAM_VOICE_MODE:      voiceMode = (byte)constrain(v, 0, 2); break;
+      case ParamId::PARAM_UNISON_DETUNE:   unisonDetune = v; break;
+      case ParamId::PARAM_SYNC_MODE:       syncMode = (byte)v; break;
+      case ParamId::PARAM_SOFT_SYNC:       softSync = (uint8_t)v; break;
+      case ParamId::PARAM_SUBOSC_DIVIDE:   subOscDivide = (uint8_t)v; break;
+      case ParamId::PARAM_FILTER_MODE:     filterMode = (uint8_t)v; break;
+
+      case ParamId::PARAM_ANALOG_DRIFT_AMOUNT: analogDrift = v; break;
+      case ParamId::PARAM_ANALOG_DRIFT_SPEED:  analogDriftSpeed = v; break;
+      case ParamId::PARAM_ANALOG_DRIFT_SPREAD: analogDriftSpread = v; break;
+
+      case ParamId::PARAM_VCF_KEYTRACK:     VCFKeytrack = v; break;
+      case ParamId::PARAM_VELOCITY_TO_VCF:  velocityToVCF = (int8_t)v; break;
+      case ParamId::PARAM_VELOCITY_TO_VCA:  velocityToVCA = (int8_t)v; break;
+
+      case ParamId::PARAM_OSC1_LEVEL: OSC1Level = v; break;
+      case ParamId::PARAM_OSC2_LEVEL: OSC2Level = v; break;
+      case ParamId::PARAM_SUB_LEVEL:  SubLevel = v; break;
+      case ParamId::PARAM_OSC3_LEVEL: OSC3Level = v; break;
+
+      case ParamId::PARAM_LFO1_TO_DCO: LFO1toDCO = v; break;
+      case ParamId::PARAM_LFO1_SPEED:  LFO1Speed = v; break;
+      case ParamId::PARAM_LFO2_SPEED:  LFO2Speed = v; break;
+      case ParamId::PARAM_VCA_LEVEL:   VCALevel = v; break;
+      case ParamId::PARAM_LFO1_TO_VCA: LFO1toVCA = v; break;
+      case ParamId::PARAM_LFO2_TO_PW:  LFO2toPWM = v; break;
+      case ParamId::PARAM_ADSR3_TO_PWM:
+        ADSR3toPWM = (int16_t)constrain((int32_t)v - 512, -512, 511);
+        break;
+      case ParamId::PARAM_ADSR3_TO_DETUNE1: ADSR3toDETUNE1 = v; break;
+
+      case ParamId::PARAM_ADSR1_ATTACK_CURVE: ADSR1AttackCurveVal = (int8_t)v; break;
+      case ParamId::PARAM_ADSR1_DECAY_CURVE:  ADSR1DecayCurveVal = (int8_t)v; break;
+      case ParamId::PARAM_ADSR2_ATTACK_CURVE: ADSR2AttackCurveVal = (int8_t)v; break;
+      case ParamId::PARAM_ADSR2_DECAY_CURVE:  ADSR2DecayCurveVal = (int8_t)v; break;
+
+      case ParamId::PARAM_DIST_DRIVE: distDrive = (uint16_t)v; break;
+      case ParamId::PARAM_DIST_MIX:   distMix = (uint16_t)v; break;
+
+      case ParamId::PARAM_PW_VALUE:     PW = (uint16_t)v; break;
+      case ParamId::PARAM_ADSR1_TO_VCA: ADSR1toVCA = v; break;
+
+      case ParamId::PARAM_LFO1_TO_OSC1:
+        LFO1toOSC1 = (uint8_t)constrain(v, 0, 255);
+        break;
+      case ParamId::PARAM_LFO1_TO_OSC2:
+        LFO1toOSC2 = (uint8_t)constrain(v, 0, 255);
+        break;
+      case ParamId::PARAM_LFO1_TO_OSC3:
+        LFO1toOSC3 = (uint8_t)constrain(v, 0, 255);
+        break;
+      case ParamId::PARAM_LFO2_TO_OSC2_COARSE:
+        LFO2toOSC2_coarse = (uint16_t)constrain(v, 0, 511);
+        break;
+      case ParamId::PARAM_LFO2_TO_OSC3_COARSE:
+        LFO2toOSC3_coarse = (uint16_t)constrain(v, 0, 511);
+        break;
+      case ParamId::PARAM_CHARACTER:
+        characterAmount = (uint8_t)constrain(v, 0, 128);
+        break;
+      case ParamId::PARAM_ADSR3_PITCH_MODE:
+        env_dco_pitch_centered = (v != 0) ? 1 : 0;
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  serial_forward_param16_to_screen(payload, len);
+}
+
 static const SerialCommandDef dcoLinkCommands[] = {
+  { INPUT_CMD_PARAM_16, INPUT_SERIAL_LEN_PARAM_16, input_handle_param16_from_dco },
   { INPUT_CMD_PARAM_32, INPUT_SERIAL_LEN_PARAM_32, input_handle_param32_from_dco },
 };
 

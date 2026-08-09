@@ -9,7 +9,7 @@ Hardware mapping for **DCO4_Input_Controller** (RP2040 front panel).
 | Port | Pins | Baud | Peer |
 |------|------|------|------|
 | `Serial` | USB | 2 000 000 | Debug |
-| `Serial1` (`DCO_PORT`) | TX **GP0** → DCO GP21, RX **GP1** ← DCO GP20 | 2 500 000 | DCO — slim LE `'a'`–`'d'` / `'p'` / `'q'`; `'x'` 154/155 back in |
+| `Serial1` (`DCO_PORT`) | TX **GP0** → DCO GP21, RX **GP1** ← DCO GP20 | 2 500 000 | DCO — slim LE `'a'`–`'d'` / `'p'` / `'q'`; `'x'` 154/155 + persistable `'p'` mirror back in |
 | `Serial2` (`SCREEN_PORT`) | TX **GP4** → Screen GP13; RX **GP5** unwired | 2 500 000 | Screen — UI frames and the relayed DCO gap, TX only (the Screen never transmits) |
 
 FIFO 512, IRQ (`setPollingMode(false)`). Brought up in `setup1()`.

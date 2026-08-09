@@ -53,9 +53,10 @@ flowchart TD
   manSend -->|DCO_PORT| mb["DCO"]
   manSend -->|"SCREEN_PORT (ADSR linear)"| scr["Screen"]
   paramTx -->|"DCO_PORT + SCREEN_PORT"| peers["DCO + Screen"]
-  mb -->|"'x' 154/155"| rx1
+  mb -->|"'x' 154/155 + persistable 'p'"| rx1
   rx1 -->|"gap 154 as 'x' on SCREEN_PORT"| scr
   rx1 -->|"cal offset 155 stored + 'y' echo"| scr
+  rx1 -->|"persistable 'p' locals + Screen toast"| scr
 ```
 
 | Context tag | Meaning |
@@ -66,7 +67,7 @@ flowchart TD
 | Every `loop` / `loop1` | Realtime forever loops |
 | Soft timer Core0 | Gated by `millisTimer()` flags (`timer1msFlag`, `timer99microsFlag`, `timer200msFlag`, …) |
 | Soft timer Core1 | Gated by `millisTimer2()` flags (`timer1msFlag2`, `timer5msFlag2`, `timer31msFlag2`, …) |
-| `DCO_PORT` = `Serial1` (DCO) | TX slim LE `'a'`–`'d'` / `'p'` / `'q'` on GP0; RX DCO `'x'` (gap 154, cal offset 155) on GP1 |
+| `DCO_PORT` = `Serial1` (DCO) | TX slim LE `'a'`–`'d'` / `'p'` / `'q'` on GP0; RX DCO `'x'` (gap 154, cal offset 155) + persistable `'p'` mirror on GP1 |
 | `SCREEN_PORT` = `Serial2` (Screen) | TX UI signals / params / linear ADSR + relayed DCO `'x'` gap 154 on GP4; no RX (the Screen never transmits) |
 | Param TX | Live path is `serial_send_param_change` / `_byte` from encoders/buttons/presets |
 | Manual controls | `*ControlManual` flags → `setControlValues` + `serial_send_manual_controls` |
@@ -119,11 +120,11 @@ TinyUSB MIDI device configuration. Sketch does **not** `#include <Adafruit_TinyU
 
 ### `Serial.h`
 
-`ENABLE_SERIAL` / `ENABLE_DCO_LINK` / `ENABLE_SCREEN_LINK`, the `DCO_PORT` / `SCREEN_PORT` aliases and the wiring comment, commented `SERIAL_FRAMING_COBS`, `SERIAL_INNER_MAX_PAYLOAD 17`, slim framing includes, legacy TX flags (`serial_send_*Flag`, `serialSendADSR3*`), decls for param senders + `serial_read_from_dco` / `init_dco_link_parser`. **No function definitions.**
+`ENABLE_SERIAL` / `ENABLE_DCO_LINK` / `ENABLE_SCREEN_LINK`, the `DCO_PORT` / `SCREEN_PORT` aliases and the wiring comment, commented `SERIAL_FRAMING_COBS`, `SERIAL_INNER_MAX_PAYLOAD 17`, slim framing includes, legacy TX flags (`serial_send_*Flag`, `serialSendADSR3*`), decls for param senders + `serial_read_from_dco` (`'x'` 154/155 + persistable `'p'` mirror) / `init_dco_link_parser`. **No function definitions.**
 
 ### `Serial.ino`
 
-Outbound slim frames on both links via `serial_frame_write`; inbound DCO `'x'` LUT parser on `DCO_PORT` (gap 154 relayed to Screen, cal offset 155 stored).
+Outbound slim frames on both links via `serial_frame_write`; inbound DCO `'x'` + persistable `'p'` LUT parser on `DCO_PORT` (gap 154 relayed to Screen, cal offset 155 stored, LittleFS locals updated from USB/MIDI mirror, `'p'` forwarded to Screen toasts).
 
 **Functions**
 - `serial_send_signal(byte)` — slim `'s'` + 1 byte on `SCREEN_PORT`.
@@ -149,6 +150,12 @@ Outbound slim frames on both links via `serial_frame_write`; inbound DCO `'x'` L
 - `serial_forward_param32_to_screen(const uint8_t*, uint8_t)` — Relay slim `'x'` (5 B) to `SCREEN_PORT` (`static`).
   - **Called from:** `input_handle_param32_from_dco` (gap 154 only).
   - **When:** Each inbound gap frame; body under `#ifdef ENABLE_SCREEN_LINK`.
+- `serial_forward_param16_to_screen(const uint8_t*, uint8_t)` — Relay slim `'p'` (3 B) to `SCREEN_PORT` (`static`). Never re-TX to DCO.
+  - **Called from:** `input_handle_param16_from_dco`.
+  - **When:** Each inbound persistable `'p'` mirror; body under `#ifdef ENABLE_SCREEN_LINK`.
+- `input_handle_param16_from_dco(...)` — Decode persistable `'p'` mirror; write LittleFS locals only (ADSR3→PWM wire − 512); forward wire `'p'` to Screen. No re-TX to DCO (`static`).
+  - **Called from:** the DCO-link LUT via `dcoLinkCommands[]`.
+  - **When:** `DCO_PORT` RX of PARAM16 from USB/MIDI echo.
 - `input_handle_param32_from_dco(...)` — Decode `'x'`; `PARAM_GAP_FROM_DCO` (154) → forward slim `'x'` to Screen; `PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO` (155) → unpack `[oscIndex:8 | offset:8]` from the low 16 bits into `manualCalibrationInitAmpCompOffset[oscIndex]`; may echo offset to Screen as `PARAM_MANUAL_CALIBRATION_OFFSET` (`static`).
   - **Called from:** the DCO-link LUT via `dcoLinkCommands[]`.
   - **When:** `DCO_PORT` RX of PARAM32.
@@ -449,6 +456,6 @@ All detailed docs live under `docs/` (this file included). Root `README.md` is t
 | Panel LEDs / brightness PWM pin | `LED_control.h` / `LED_control.ino` (`PIN_LED_PWM` GPIO 5) |
 | ADSR lin→exp for the DCO | `auxiliary.ino` / `linearToExponential` / use in `Serial2.ino` |
 | Preset layout / load/save | `presetStorage.ino` + `FS.h` |
-| RX DCO `'x'` (gap 154 relay / cal offset 155) | `Serial.ino` `serial_read_from_dco` + `input_handle_param32_from_dco` (+ `serial_forward_param32_to_screen`) |
+| RX DCO `'x'` (gap 154 relay / cal offset 155) + persistable `'p'` | `Serial.ino` `serial_read_from_dco` + `input_handle_param32_from_dco` / `input_handle_param16_from_dco` (+ Screen forward) |
 | Legacy flag-driven DCO TX | Re-enable `sendSerial()` in `loop1` **or** remove stale flag sets |
 | Formulas / inbound param router | Currently dead: `formulas.*`, `params.ino`, `param_router.h` |
