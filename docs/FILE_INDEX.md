@@ -66,7 +66,7 @@ flowchart TD
 | Every `loop` / `loop1` | Realtime forever loops |
 | Soft timer Core0 | Gated by `millisTimer()` flags (`timer1msFlag`, `timer99microsFlag`, `timer200msFlag`, …) |
 | Soft timer Core1 | Gated by `millisTimer2()` flags (`timer1msFlag2`, `timer5msFlag2`, `timer31msFlag2`, …) |
-| `DCO_PORT` = `Serial1` (DCO) | TX `'a'`–`'f'` control blocks + `'p'`/`'w'` params on GP0; RX DCO `'x'` (gap 154, cal offset 155) on GP1 |
+| `DCO_PORT` = `Serial1` (DCO) | TX slim LE `'a'`–`'d'` / `'p'` / `'q'` on GP0; RX DCO `'x'` (gap 154, cal offset 155) on GP1 |
 | `SCREEN_PORT` = `Serial2` (Screen) | TX UI signals / params / linear ADSR + relayed DCO `'x'` gap 154 on GP4; no RX (the Screen never transmits) |
 | Param TX | Live path is `serial_send_param_change` / `_byte` from encoders/buttons/presets |
 | Manual controls | `*ControlManual` flags → `setControlValues` + `serial_send_manual_controls` |
@@ -84,7 +84,7 @@ Main sketch: dual-core `setup`/`loop`/`setup1`/`loop1`, voice/param globals, UAR
 - `setup()` — `init_controls()` + `init_tables()`.
   - **Called from:** Arduino framework (Core 0).
   - **When:** Boot Core0 once.
-- `setup1()` — USB Serial + `DCO_PORT` (RX1/TX0) + `SCREEN_PORT` (RX5/TX4) @ 2 500 000; `init_LED_control`; `initFS`; `analogWrite(PIN_LED_PWM, 245)`.
+- `setup1()` — USB Serial + `DCO_PORT` (RX1/TX0, IRQ) + `SCREEN_PORT` (RX5/TX4, IRQ) @ 2 500 000; `init_dco_link_parser`; `init_LED_control`; `initFS`; `analogWrite(PIN_LED_PWM, 245)`.
   - **Called from:** Arduino framework (Core 1).
   - **When:** Boot Core1 once.
   - Note: `PIN_LED_PWM` is GPIO **5**, so this `analogWrite` takes the pin back from `SCREEN_PORT.setRX(5)`. Harmless: GP5 has no conductor and the Screen never transmits.
@@ -107,7 +107,7 @@ Live synth/UI parameter globals (ADSR, LFO, voice mode, calibration, manual flag
 
 ### `params_def.h`
 
-Canonical `enum ParamId`. **No function definitions.**
+Canonical `enum ParamId` (includes `PARAM_PW_VALUE` 210, `PARAM_ADSR1_TO_VCA` 222). **No function definitions.**
 
 ### `tusb_config.h`
 
@@ -119,49 +119,42 @@ TinyUSB MIDI device configuration. Sketch does **not** `#include <Adafruit_TinyU
 
 ### `Serial.h`
 
-`ENABLE_SERIAL` / `ENABLE_DCO_LINK` / `ENABLE_SCREEN_LINK`, the `DCO_PORT` / `SCREEN_PORT` aliases and the wiring comment, finish byte, legacy TX flags (`serial_send_*Flag`, `serialSendADSR3*`), decls for param senders + `serial_read_from_dco`. **No function definitions.**
+`ENABLE_SERIAL` / `ENABLE_DCO_LINK` / `ENABLE_SCREEN_LINK`, the `DCO_PORT` / `SCREEN_PORT` aliases and the wiring comment, commented `SERIAL_FRAMING_COBS`, `SERIAL_INNER_MAX_PAYLOAD 17`, slim framing includes, legacy TX flags (`serial_send_*Flag`, `serialSendADSR3*`), decls for param senders + `serial_read_from_dco` / `init_dco_link_parser`. **No function definitions.**
 
 ### `Serial.ino`
 
-Outbound frames on both links; inbound DCO `'x'` parser on `DCO_PORT` (gap 154 relayed to Screen, cal offset 155 stored).
+Outbound slim frames on both links via `serial_frame_write`; inbound DCO `'x'` LUT parser on `DCO_PORT` (gap 154 relayed to Screen, cal offset 155 stored).
 
 **Functions**
-- `sendUint16(uint16_t)` — `'u'` + 2 bytes on `DCO_PORT`.
-  - **Called from:** **none (dead)** — only commented site in `encoders.ino`.
-- `sendFloat(float)` — `'t'` + 4 bytes on `DCO_PORT`.
-  - **Called from:** **none (dead)**.
-- `sendOK()` — `'k'` on `DCO_PORT`.
-  - **Called from:** **none (dead)**.
-- `serial_send_autotune()` — `'a'` + 255 on `DCO_PORT` + flush.
-  - **Called from:** **none (dead)**.
-- `serial_send_signal(byte)` — `'s'` + signal on `SCREEN_PORT`.
+- `serial_send_signal(byte)` — slim `'s'` + 1 byte on `SCREEN_PORT`.
   - **Called from:** `buttons.ino`; `presetStorage.ino` (`loadPreset`); legacy path in `Controls.ino` (`read_encoder_buttons_preset_save`, itself dead).
   - **When:** Preset / button UI; body under `#ifdef ENABLE_SCREEN_LINK`.
-- `serial_send_param_change(byte, uint16_t, bool)` — `'p'` frame → `SCREEN_PORT` (if `sendToAll`) and/or `DCO_PORT`.
+- `serial_send_param_change(byte, uint16_t, bool)` — slim `'p'` `[id][i16 LE]` → `SCREEN_PORT` (if `sendToAll`) and/or `DCO_PORT`.
   - **Called from:** many sites in `encoders.ino`, `buttons.ino`, `presetStorage.ino`.
   - **When:** Encoder/button/preset param TX; `#ifdef ENABLE_SCREEN_LINK` / `ENABLE_DCO_LINK`.
-- `serial_send_param_change_byte(byte, byte, bool)` — `'w'` frame → `SCREEN_PORT` and/or `DCO_PORT`.
+- `serial_send_param_change_byte(byte, byte, bool)` — Screen slim `'w'` `[id][u8]`; DCO slim `'p'` (u8 zero-extended to i16). 255 = screen-only.
   - **Called from:** many sites in `encoders.ino`, `buttons.ino`, `presetStorage.ino`.
   - **When:** Encoder/button/preset param TX; gated same.
-- `serial_send_preset_name_to_mainboard()` — `'q'` + 8 chars + finish on `DCO_PORT`.
+- `serial_send_preset_name_to_mainboard()` — slim `'q'` + 8 chars on `DCO_PORT`.
   - **Called from:** **none (dead)**.
-- `serial_send_preset_scroll(byte, byte[])` — `'q'` + preset # + 16-char name on `SCREEN_PORT`.
+- `serial_send_preset_scroll(byte, byte[])` — slim `'q'` + preset # + 16-char name on `SCREEN_PORT`.
   - **Called from:** `encoders.ino`; `buttons.ino`; `Controls.ino` legacy save path (dead caller).
   - **When:** Preset scroll / save UI; `#ifdef ENABLE_SCREEN_LINK`.
-- `serial_send_save_char_select(byte)` — `'c'` + char position on `SCREEN_PORT`.
+- `serial_send_save_char_select(byte)` — slim `'c'` + char position on `SCREEN_PORT`.
   - **Called from:** `encoders.ino`; `Controls.ino` legacy save path (dead caller).
   - **When:** Save-name UI; `#ifdef ENABLE_SCREEN_LINK`.
-- `serialSendParamByteToScreen(byte, byte)` — `'y'` frame on `SCREEN_PORT`.
+- `serialSendParamByteToScreen(byte, byte)` — slim `'y'` `[id][u8]` on `SCREEN_PORT`.
   - **Called from:** `input_handle_param32_from_dco`; `encoders.ino` (manual cal); `buttons.ino` (manual cal).
   - **When:** Screen-only UI params / cal offset echo.
-- `serial_forward_param32_to_screen(const uint8_t*, uint8_t)` — Rebuild the received PARAM_32 payload as the same 7-byte `'x'` frame and write it to `SCREEN_PORT` (`static`).
+- `serial_forward_param32_to_screen(const uint8_t*, uint8_t)` — Relay slim `'x'` (5 B) to `SCREEN_PORT` (`static`).
   - **Called from:** `input_handle_param32_from_dco` (gap 154 only).
   - **When:** Each inbound gap frame; body under `#ifdef ENABLE_SCREEN_LINK`.
-  - Note: TX wait is `while (SCREEN_PORT.availableForWrite() < 1) {}` — on RP2040 hardware UARTs `availableForWrite()` returns only 0 or 1, so waiting for a larger count would block Core1 forever.
-- `input_handle_param32_from_dco(...)` — Decode `'x'`; `PARAM_GAP_FROM_DCO` (154) → forward verbatim to Screen; `PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO` (155) → unpack `[oscIndex:8 | offset:8]` from the low 16 bits into `manualCalibrationInitAmpCompOffset[oscIndex]`; may echo offset to Screen as `PARAM_MANUAL_CALIBRATION_OFFSET` (`static`).
-  - **Called from:** the DCO-link parser via `dcoLinkCommands[]` → `serial_parser_process_byte`.
+- `input_handle_param32_from_dco(...)` — Decode `'x'`; `PARAM_GAP_FROM_DCO` (154) → forward slim `'x'` to Screen; `PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO` (155) → unpack `[oscIndex:8 | offset:8]` from the low 16 bits into `manualCalibrationInitAmpCompOffset[oscIndex]`; may echo offset to Screen as `PARAM_MANUAL_CALIBRATION_OFFSET` (`static`).
+  - **Called from:** the DCO-link LUT via `dcoLinkCommands[]`.
   - **When:** `DCO_PORT` RX of PARAM32.
-- `serial_read_from_dco()` — Timeout + drain `DCO_PORT` into `dcoLinkParser` (non-blocking pump for the DCO link).
+- `init_dco_link_parser()` — Fill `dcoLinkLut` from `dcoLinkCommands[]`.
+  - **Called from:** `setup1()` after `DCO_PORT.begin`.
+- `serial_read_from_dco()` — `serial_parser_drain` on `DCO_PORT` (budget 64).
   - **Called from:** `loop1()` every iteration.
   - **When:** Every `loop1`; body under `#ifdef ENABLE_DCO_LINK`.
 
@@ -170,7 +163,7 @@ Outbound frames on both links; inbound DCO `'x'` parser on `DCO_PORT` (gap 154 r
 Periodic manual-control blocks; legacy flag flusher.
 
 **Functions**
-- `serial_send_manual_controls(bool presetLoading)` — When manual flags or preset load: send `'a'`/`'b'` (exp ADSR on `DCO_PORT`, linear on `SCREEN_PORT`), `'c'` ADSR3, `'d'` filter block, `'e'` ADSR1→VCA, `'f'` PW on `DCO_PORT`.
+- `serial_send_manual_controls(bool presetLoading)` — When manual flags or preset load: slim `'a'`/`'b'` (exp ADSR LE on `DCO_PORT`, linear LE on `SCREEN_PORT`), `'c'` ADSR3, `'d'` filter, `'p'` 222 ADSR1→VCA, `'p'` 210 PW on `DCO_PORT`.
   - **Called from:** `loop1()` when `timer1msFlag2`; `loadPreset()` in `presetStorage.ino`.
   - **When:** Soft timer Core1 ~1 ms; preset load.
 - `sendSerial()` — Flag-driven legacy `DCO_PORT` cmds (`'r'`,`'t'`,`'y'`,`'z'`,`'l'`,`'m'`,`'b'`,`'s'`,`'w'`,`'c'`) to the DCO.
@@ -192,52 +185,33 @@ Periodic manual-control blocks; legacy flag flusher.
 |--------------------|-------------|
 | `update_parameters(byte, uint16_t)` | Map param id → `paramName` string for UI |
 
+### `serial_frame.h`
+
+Copied from DCO. Inner pack/unpack + optional COBS + `serial_frame_write()`. `SERIAL_INNER_MAX_PAYLOAD` is 17 (Screen `'q'`). Default RAW; `#define SERIAL_FRAMING_COBS` in `Serial.h`.
+
 ### `serial_parser.h`
 
-Generic non-blocking frame parser.
+Copied from DCO. O(1) LUT + 500 µs idle timeout + `serial_parser_drain` budget 64.
 
 **Functions**
-- `serial_parser_reset()` — Clear context to wait-for-cmd.
-  - **Called from:** `serial_parser_check_timeout`; `serial_parser_process_byte`.
-  - **When:** Timeout or frame complete.
-- `serial_parser_find_cmd()` — Lookup command def.
-  - **Called from:** `serial_parser_process_byte`.
-  - **When:** First byte of frame.
-- `serial_parser_check_timeout()` — Drop stale partial frames.
-  - **Called from:** `serial_read_from_dco`.
-  - **When:** Before draining UART if mid-payload.
-- `serial_parser_process_byte()` — State machine; invoke `on_frame` when complete.
-  - **Called from:** `serial_read_from_dco`.
-  - **When:** Each `DCO_PORT` RX byte.
+- `serial_parser_reset()` / `serial_command_table_init()` / `serial_parser_check_timeout()` / `serial_parser_process_byte()` / `serial_parser_drain()`.
+  - **Called from:** `init_dco_link_parser`; `serial_read_from_dco`.
 
 ### `serial_param_protocol.h`
 
+LE encode/decode for `'p'`/`'w'`/`'x'`.
+
 **Functions**
-- `decode_i16_be()` — Big-endian int16.
-  - **Called from:** `decode_param_p`.
-- `decode_i32_le()` — Little-endian int32.
-  - **Called from:** `decode_param_x`.
-- `decode_param_p()` / `decode_param_w()` — Fill `ParamFrame` for `'p'`/`'w'`.
-  - **Called from:** **none (dead)** in this firmware (docs / other boards).
-- `decode_param_x()` — Fill `ParamFrame` for `'x'`.
-  - **Called from:** `input_handle_param32_from_dco`.
-  - **When:** `DCO_PORT` PARAM32 RX.
+- `encode_u16_le()` / `decode_u16_le()` / `decode_param_p()` / `encode_param_p()` / `encode_param_w()` / `decode_param_x()` / `encode_param32()`.
+  - **Called from:** TX helpers in `Serial.ino` / `Serial2.ino`; `input_handle_param32_from_dco`.
 
 ### `serial_protocol.h`
 
-Shared DCO-link command enums / payload lengths (copied for ParamId overlap); `'x'` PARAM_32 is the one used here.
-
-**Functions**
-- `serial_protocol_payload_len(char)` — Map cmd → size.
-  - **Called from:** **none (dead)** — tables use constexpr lengths directly.
+Compatibility stub → `serial_input_protocol.h`. **No function definitions.**
 
 ### `serial_input_protocol.h`
 
-Legacy input→mainboard command enums / sizes (`'a'`–`'f'`,`'p'`,`'w'`,`'q'`). **Not `#include`d by any `.ino`/`.h` in this repo.**
-
-**Functions**
-- `input_serial_payload_len(char)` — Map cmd → size.
-  - **Called from:** **none (dead)** — header unused.
+Shared DCO inner cmds + sizes (`'a'`–`'d'`, `'p'`, `'q'`, `'x'`). Screen-only cmds live in TX helpers / Screen LUT.
 
 ---
 
@@ -434,7 +408,7 @@ All detailed docs live under `docs/` (this file included). Root `README.md` is t
 | `docs/SYSTEM_OVERVIEW.md` | Current | Stub pointing to DCO4_DCO canonical overview (+ local UART table). |
 | `docs/CONTROL_PIPELINE.md` | Current | Mux/encoder/button → params → DCO / Screen path. |
 | `docs/PANEL_AND_PINS.md` | Current | Panel mux / encoder / LED / UART pin map. |
-| `docs/PRESETS.md` | Current | LittleFS bank layout, load/save. |
+| `docs/PRESETS.md` | Current | Preset ownership, boot migration, UI FSM, load/save TX, byte layout. |
 | `docs/REFERENCE_AI.md` | Current | Deep semantic map. |
 | `docs/FILE_INDEX.md` | Current | This file — files, functions, call sites. |
 | `docs/README_serial_and_params.md` | Current | Shared serial / ParamId how-to. |
@@ -463,9 +437,9 @@ All detailed docs live under `docs/` (this file included). Root `README.md` is t
 |------|------------|
 | Boot / dual-core split | `DCO4_Input_Controller.ino` (`setup` / `setup1` / `loop` / `loop1`) |
 | UART peers, baud, pins | `setup1()` + `Serial.h` `ENABLE_*` |
-| DCO TX blocks `'a'`–`'f'` | `Serial2.ino` `serial_send_manual_controls` (writes `DCO_PORT`) |
+| DCO TX blocks `'a'`–`'d'` + `'p'` 210/222 | `Serial2.ino` `serial_send_manual_controls` (writes `DCO_PORT`) |
 | Screen signals / scroll / `'y'` | `Serial.ino` (`serial_send_signal`, `serial_send_preset_scroll`, `serialSendParamByteToScreen`) |
-| Param `'p'`/`'w'` TX | `serial_send_param_change` / `_byte` from `encoders.ino` / `buttons.ino` / `presetStorage.ino` |
+| Param `'p'` / Screen `'w'` TX | `serial_send_param_change` / `_byte` from `encoders.ino` / `buttons.ino` / `presetStorage.ino` |
 | New ParamId | `params_def.h` + encoder/button/preset TX sites (no local `apply_param_*` table) |
 | Fader/pot → ADSR/VCF/VCA/PW | `Controls.ino` `setControlValues` |
 | Mux / encoder / button pins | `Controls.h` |

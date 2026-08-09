@@ -29,7 +29,7 @@ Primarily a **protocol sender**, plus a thin relay of DCO `'x'` frames to the Sc
 
 **Core 0:** scan hardware (`readControls` → mux / encoders / buttons). Encoder/button handlers emit ParamIds, UI signals, preset ops.
 
-**Core 1:** map filtered ADC when manual flags set; TX `'a'..'f'` blocks + params on `DCO_PORT`; LED refresh; parse inbound DCO `'x'` on `DCO_PORT` (`serial_read_from_dco`) and relay gap 154 to the Screen on `SCREEN_PORT`.
+**Core 1:** map filtered ADC when manual flags set; TX slim LE `'a'`–`'d'` / `'p'` on `DCO_PORT`; LED refresh; parse inbound DCO `'x'` on `DCO_PORT` (`serial_read_from_dco`) and relay gap 154 to the Screen on `SCREEN_PORT`.
 
 ---
 
@@ -52,8 +52,9 @@ Primarily a **protocol sender**, plus a thin relay of DCO `'x'` frames to the Sc
 ## Edit carefully
 
 - **ParamId numbers** — keep aligned with the DCO `params_def.h` (coordination point).
-- **`'a'..'f'` payload sizes** — must match the receiving handlers on the DCO.
-- **Screen `'q'` is 16 chars; the legacy Mainboard `'q'` was 8** — do not conflate.
+- **`'a'`–`'d'` payload sizes + LE** — must match DCO handlers. VCA/PW are `'p'` 222 / 210, not `'e'`/`'f'`.
+- **DCO `'q'` is 8 chars; Screen `'q'` is preset# + 16 chars** — do not conflate. `SERIAL_INNER_MAX_PAYLOAD` is 17 here for Screen TX.
+- **Framing** — default RAW; `#define SERIAL_FRAMING_COBS` must match DCO/Screen.
 - **`DCO_PORT` is `Serial1`** (TX GP0 → DCO GP21, RX GP1 ← DCO GP20); **`SCREEN_PORT` is `Serial2`** (TX GP4 → Screen GP13, TX-only — the Screen never transmits). Never address `Serial1` / `Serial2` directly; the numbers do not tell you the peer.
 - **TX waits** must use `availableForWrite() < 1` — RP2040 hardware UARTs report only 0 or 1 free.
 - LED PWM on **GP5** takes the pin back from `Serial2` RX, which is fine: no conductor, and the Screen never transmits.

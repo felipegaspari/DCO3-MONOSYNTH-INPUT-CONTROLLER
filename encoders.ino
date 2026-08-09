@@ -260,7 +260,7 @@ void read_encoders() {
           }
           LFO2toOSC2DETUNE = constrain(LFO2toOSC2DETUNE, 0, 255);
         }
-        serial_send_param_change_byte(ParamId::PARAM_LFO2_TO_DETUNE2, (uint8_t)LFO2toOSC2DETUNE);
+        serial_send_param_change_byte(ParamId::PARAM_LFO2_TO_OSC2, (uint8_t)LFO2toOSC2DETUNE);
         break;
 
       case ACTION_LFO2_to_OSC3:
@@ -272,7 +272,7 @@ void read_encoders() {
           }
           LFO2toOSC3DETUNE = constrain(LFO2toOSC3DETUNE, 0, 255);
         }
-        serial_send_param_change_byte(ParamId::PARAM_LFO2_TO_DETUNE3, (uint8_t)LFO2toOSC3DETUNE);
+        serial_send_param_change_byte(ParamId::PARAM_LFO2_TO_OSC3, (uint8_t)LFO2toOSC3DETUNE);
         break;
 
       case ACTION_osc_sync_mode:

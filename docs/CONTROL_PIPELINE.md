@@ -54,14 +54,14 @@ Peer is the **DCO** board (its own `Serial2`, RX GP21) at 2.5 Mbaud. This board 
 
 | When | Cmd | Content |
 |------|-----|---------|
-| Manual ADSR1 / preset load | `'a'` | 8 bytes A/D/S/R (**exp-mapped** via `linToExpLookup`) |
+| Manual ADSR1 / preset load | `'a'` | 8 bytes A/D/S/R **LE** (**exp-mapped** via `linToExpLookup`) |
 | Manual ADSR2 | `'b'` | Same for ADSR2 |
 | Manual ADSR3 | `'c'` | Exp-mapped ADSR3 (DCO only) |
-| Manual VCF pots | `'d'` | CUTOFF, RESONANCE, ADSR2toVCF, LFO2toVCF |
-| Manual VCA pot | `'e'` | ADSR1toVCA |
-| Manual PW pot | `'f'` | PW |
-| Encoder/button ParamId | `'p'` / `'w'` | Via `serial_send_param_change*` |
-| Preset name (8 chars) | `'q'` | `serial_send_preset_name_to_mainboard` (**dead**, legacy Mainboard format) |
+| Manual VCF pots | `'d'` | CUTOFF, RESONANCE, ADSR2toVCF, LFO2toVCF LE |
+| Manual VCA pot | `'p'` 222 | `PARAM_ADSR1_TO_VCA` i16 LE |
+| Manual PW pot | `'p'` 210 | `PARAM_PW_VALUE` i16 LE |
+| Encoder/button ParamId | `'p'` | Via `serial_send_param_change` / `_byte` (byte params zero-extended to i16) |
+| Preset name (8 chars) | `'q'` | `serial_send_preset_name_to_mainboard` (**dead**) |
 
 `serial_send_manual_controls(presetLoading)` gates blocks on the `*ControlManual` flags (or forces all when loading a preset).
 
@@ -71,13 +71,14 @@ Peer is the **DCO** board (its own `Serial2`, RX GP21) at 2.5 Mbaud. This board 
 
 | Cmd | Role |
 |-----|------|
-| `'a'` / `'b'` | ADSR1/2 **raw** fader values (UI bars) |
-| `'q'` | Preset scroll: number + **16**-char name |
+| `'a'` / `'b'` | ADSR1/2 **raw** fader values LE (UI bars) |
+| `'q'` | Preset scroll: number + **16**-char name (17 B, no finish) |
 | `'s'` | UI mode signals (load/save flow — list in `Serial.h`) |
 | `'c'` | Save char-position select |
-| `'y'` | Byte param to screen |
-| `'p'` / `'w'` | When `sendToAll` |
-| `'x'` | Gap 154 relayed verbatim from the DCO (`serial_forward_param32_to_screen`) |
+| `'y'` | `[id][u8]` nav/cal to screen |
+| `'p'` | Slim `'p'` when `sendToAll` |
+| `'w'` | Screen-only 8-bit UI `[id][u8]` when `sendToAll` |
+| `'x'` | Slim gap 154 relayed from the DCO (`serial_forward_param32_to_screen`) |
 
 ---
 
@@ -87,7 +88,7 @@ Live path: `serial_read_from_dco()` on **`DCO_PORT`** (RX GP1 ← DCO GP20) pump
 
 | ParamId | Handling |
 |---------|----------|
-| `PARAM_GAP_FROM_DCO` (154) | Forwarded verbatim as the same 7-byte `'x'` frame to the Screen on `SCREEN_PORT` (`serial_forward_param32_to_screen`) |
+| `PARAM_GAP_FROM_DCO` (154) | Forwarded as slim `'x'` (5 B `[id][u32 LE]`) to the Screen on `SCREEN_PORT` (`serial_forward_param32_to_screen`) |
 | `PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO` (155) | Low 16 bits unpacked as `[oscIndex:8 \| offset:8]` into `manualCalibrationInitAmpCompOffset[oscIndex]`; echoed to the Screen as `PARAM_MANUAL_CALIBRATION_OFFSET` when manual calibration is showing that oscillator |
 
 The Screen has no direct DCO link, so every gap update reaches it through this relay. `SCREEN_PORT` is TX-only (the Screen never transmits). See [`SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md) / DCO canonical note.
@@ -98,7 +99,7 @@ No live `update_parameters` / `paramTable` on this board (`params.ino` commented
 
 ## Presets
 
-LittleFS bank → RAM → `loadPreset` / `writePreset` unpack ParamIds and re-TX. Details: [`PRESETS.md`](PRESETS.md).
+LittleFS bank → RAM → `loadPreset` / `writePreset` unpack ParamIds and re-TX (including `'a'`–`'d'` + `'p'` 210/222 via `serial_send_manual_controls(true)`). Full flow and slot layout: [`PRESETS.md`](PRESETS.md).
 
 ---
 

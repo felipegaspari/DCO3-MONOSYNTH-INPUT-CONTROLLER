@@ -1,127 +1,90 @@
-// @1 ms / preset load: TX manual control blocks 'a'..'f' to the DCO, and 'a'/'b' to the Screen.
+static inline void pack_u16_le4(uint8_t* dst, uint16_t a, uint16_t b, uint16_t c, uint16_t d) {
+  encode_u16_le(dst + 0, a);
+  encode_u16_le(dst + 2, b);
+  encode_u16_le(dst + 4, c);
+  encode_u16_le(dst + 6, d);
+}
+
+// @1 ms / preset load: TX manual control blocks to the DCO, and 'a'/'b' to the Screen.
 void serial_send_manual_controls(bool presetLoading) {
   if (faderRow1ControlManual || presetLoading) {
-    // Exponential-mapped values for DCO
-    byte dataArrayDCO[8];
+    uint8_t dataArrayDCO[8];
     uint16_t ADSR1_attack_serial  = linToExpLookup[ADSR1_attack];
     uint16_t ADSR1_decay_serial   = linToExpLookup[ADSR1_decay];
     uint16_t ADSR1_release_serial = linToExpLookup[ADSR1_release];
+    pack_u16_le4(dataArrayDCO,
+                 ADSR1_attack_serial, ADSR1_decay_serial,
+                 ADSR1_sustain, ADSR1_release_serial);
 
-    dataArrayDCO[0] = highByte(ADSR1_attack_serial);
-    dataArrayDCO[1] = lowByte(ADSR1_attack_serial);
-    dataArrayDCO[2] = highByte(ADSR1_decay_serial);
-    dataArrayDCO[3] = lowByte(ADSR1_decay_serial);
-    dataArrayDCO[4] = highByte(ADSR1_sustain);
-    dataArrayDCO[5] = lowByte(ADSR1_sustain);
-    dataArrayDCO[6] = highByte(ADSR1_release_serial);
-    dataArrayDCO[7] = lowByte(ADSR1_release_serial);
+    uint8_t dataArrayScreen[8];
+    pack_u16_le4(dataArrayScreen,
+                 ADSR1_attack, ADSR1_decay, ADSR1_sustain, ADSR1_release);
 
-    // Raw fader values for Screen (so UI bars reflect linear position)
-    byte dataArrayScreen[8];
-    dataArrayScreen[0] = highByte(ADSR1_attack);
-    dataArrayScreen[1] = lowByte(ADSR1_attack);
-    dataArrayScreen[2] = highByte(ADSR1_decay);
-    dataArrayScreen[3] = lowByte(ADSR1_decay);
-    dataArrayScreen[4] = highByte(ADSR1_sustain);
-    dataArrayScreen[5] = lowByte(ADSR1_sustain);
-    dataArrayScreen[6] = highByte(ADSR1_release);
-    dataArrayScreen[7] = lowByte(ADSR1_release);
-
-    // Send ADSR1 values to DCO and Screen
-    DCO_PORT.write((char *)"a");
-    DCO_PORT.write(dataArrayDCO, 8);
-    SCREEN_PORT.write((char *)"a");
-    SCREEN_PORT.write(dataArrayScreen, 8);
+#ifdef ENABLE_DCO_LINK
+    serial_frame_write(DCO_PORT, INPUT_CMD_ADSR1_BLOCK, dataArrayDCO, INPUT_SERIAL_LEN_ADSR_BLOCK);
+#endif
+#ifdef ENABLE_SCREEN_LINK
+    serial_frame_write(SCREEN_PORT, INPUT_CMD_ADSR1_BLOCK, dataArrayScreen, INPUT_SERIAL_LEN_ADSR_BLOCK);
+#endif
   }
 
-  if ((faderRow2ControlManual && !ADSR3Enabled)  || presetLoading) {
-    // Exponential-mapped values for DCO
-    byte dataArrayDCO[8];
+  if ((faderRow2ControlManual && !ADSR3Enabled) || presetLoading) {
+    uint8_t dataArrayDCO[8];
     uint16_t ADSR2_attack_serial  = linToExpLookup[ADSR2_attack];
     uint16_t ADSR2_decay_serial   = linToExpLookup[ADSR2_decay];
     uint16_t ADSR2_release_serial = linToExpLookup[ADSR2_release];
+    pack_u16_le4(dataArrayDCO,
+                 ADSR2_attack_serial, ADSR2_decay_serial,
+                 ADSR2_sustain, ADSR2_release_serial);
 
-    dataArrayDCO[0] = highByte(ADSR2_attack_serial);
-    dataArrayDCO[1] = lowByte(ADSR2_attack_serial);
-    dataArrayDCO[2] = highByte(ADSR2_decay_serial);
-    dataArrayDCO[3] = lowByte(ADSR2_decay_serial);
-    dataArrayDCO[4] = highByte(ADSR2_sustain);
-    dataArrayDCO[5] = lowByte(ADSR2_sustain);
-    dataArrayDCO[6] = highByte(ADSR2_release_serial);
-    dataArrayDCO[7] = lowByte(ADSR2_release_serial);
+    uint8_t dataArrayScreen[8];
+    pack_u16_le4(dataArrayScreen,
+                 ADSR2_attack, ADSR2_decay, ADSR2_sustain, ADSR2_release);
 
-    // Raw fader values for Screen
-    byte dataArrayScreen[8];
-    dataArrayScreen[0] = highByte(ADSR2_attack);
-    dataArrayScreen[1] = lowByte(ADSR2_attack);
-    dataArrayScreen[2] = highByte(ADSR2_decay);
-    dataArrayScreen[3] = lowByte(ADSR2_decay);
-    dataArrayScreen[4] = highByte(ADSR2_sustain);
-    dataArrayScreen[5] = lowByte(ADSR2_sustain);
-    dataArrayScreen[6] = highByte(ADSR2_release);
-    dataArrayScreen[7] = lowByte(ADSR2_release);
+#ifdef ENABLE_DCO_LINK
+    serial_frame_write(DCO_PORT, INPUT_CMD_ADSR2_BLOCK, dataArrayDCO, INPUT_SERIAL_LEN_ADSR_BLOCK);
+#endif
+#ifdef ENABLE_SCREEN_LINK
+    serial_frame_write(SCREEN_PORT, INPUT_CMD_ADSR2_BLOCK, dataArrayScreen, INPUT_SERIAL_LEN_ADSR_BLOCK);
+#endif
+  }
 
-    // Send ADSR2 values to DCO and Screen
-    DCO_PORT.write((char *)"b");
-    DCO_PORT.write(dataArrayDCO, 8);
-    SCREEN_PORT.write((char *)"b");
-    SCREEN_PORT.write(dataArrayScreen, 8);
-  } 
-  if ((faderRow2ControlManual && ADSR3Enabled)  || presetLoading) {
-    byte dataArray[8];
-
+  if ((faderRow2ControlManual && ADSR3Enabled) || presetLoading) {
+    uint8_t dataArray[8];
     uint16_t ADSR3_attack_serial  = linToExpLookup[ADSR3_attack];
     uint16_t ADSR3_decay_serial   = linToExpLookup[ADSR3_decay];
     uint16_t ADSR3_release_serial = linToExpLookup[ADSR3_release];
-
-    dataArray[0] = highByte(ADSR3_attack_serial);
-    dataArray[1] = lowByte(ADSR3_attack_serial);
-    dataArray[2] = highByte(ADSR3_decay_serial);
-    dataArray[3] = lowByte(ADSR3_decay_serial);
-    dataArray[4] = highByte(ADSR3_sustain);
-    dataArray[5] = lowByte(ADSR3_sustain);
-    dataArray[6] = highByte(ADSR3_release_serial);
-    dataArray[7] = lowByte(ADSR3_release_serial);
-
-    // Send ADSR3 manual values to the DCO only.
-    // (Screen does not currently display ADSR3 via 'c' frames.)
-    DCO_PORT.write((char *)"c");
-    DCO_PORT.write(dataArray, 8);
+    pack_u16_le4(dataArray,
+                 ADSR3_attack_serial, ADSR3_decay_serial,
+                 ADSR3_sustain, ADSR3_release_serial);
+#ifdef ENABLE_DCO_LINK
+    serial_frame_write(DCO_PORT, INPUT_CMD_ADSR3_BLOCK, dataArray, INPUT_SERIAL_LEN_ADSR_BLOCK);
+#endif
   }
 
-  if (VCFPotsControlManual  || presetLoading) {
-    byte dataArray[8];
-    dataArray[0] = highByte(CUTOFF);
-    dataArray[1] = lowByte(CUTOFF);
-    dataArray[2] = highByte(RESONANCE);
-    dataArray[3] = lowByte(RESONANCE);
-    dataArray[4] = highByte(ADSR2toVCF);
-    dataArray[5] = lowByte(ADSR2toVCF);
-    dataArray[6] = highByte(LFO2toVCF);
-    dataArray[7] = lowByte(LFO2toVCF);
-
-    DCO_PORT.write((char *)"d");
-    DCO_PORT.write(dataArray, 8);
+  if (VCFPotsControlManual || presetLoading) {
+    uint8_t dataArray[8];
+    pack_u16_le4(dataArray, CUTOFF, RESONANCE,
+                 (uint16_t)ADSR2toVCF, LFO2toVCF);
+#ifdef ENABLE_DCO_LINK
+    serial_frame_write(DCO_PORT, INPUT_CMD_FILTER_BLOCK, dataArray, INPUT_SERIAL_LEN_FILTER_BLOCK);
+#endif
   }
 
-  if (VCAPotsControlManual  || presetLoading) {
-    byte dataArray[2];
-
-    dataArray[0] = highByte(ADSR1toVCA);
-    dataArray[1] = lowByte(ADSR1toVCA);
-
-    DCO_PORT.write((char *)"e");
-    DCO_PORT.write(dataArray, 2);
+  if (VCAPotsControlManual || presetLoading) {
+#ifdef ENABLE_DCO_LINK
+    uint8_t p[INPUT_SERIAL_LEN_PARAM_16];
+    encode_param_p(p, (uint8_t)ParamId::PARAM_ADSR1_TO_VCA, (int16_t)ADSR1toVCA);
+    serial_frame_write(DCO_PORT, INPUT_CMD_PARAM_16, p, INPUT_SERIAL_LEN_PARAM_16);
+#endif
   }
 
-  if (PWMPotsControlManual  || presetLoading) {
-    byte dataArray[2];
-
-    dataArray[0] = highByte(PW);
-    dataArray[1] = lowByte(PW);
-
-    DCO_PORT.write((char *)"f");
-    DCO_PORT.write(dataArray, 2);
+  if (PWMPotsControlManual || presetLoading) {
+#ifdef ENABLE_DCO_LINK
+    uint8_t p[INPUT_SERIAL_LEN_PARAM_16];
+    encode_param_p(p, (uint8_t)ParamId::PARAM_PW_VALUE, (int16_t)PW);
+    serial_frame_write(DCO_PORT, INPUT_CMD_PARAM_16, p, INPUT_SERIAL_LEN_PARAM_16);
+#endif
   }
 }
 
@@ -198,7 +161,6 @@ void sendSerial() {  // to DCO
       ADSR3BytesArray[2] = (byte)(ADSR3_decay / 16);
       ADSR3BytesArray[3] = (byte)(ADSR3_sustain / 16);
       ADSR3BytesArray[4] = (byte)(ADSR3_release / 16);
-      //DCO_PORT.write((char *)"s");
       DCO_PORT.write(ADSR3BytesArray, 5);
       serialSendADSR3ControlValuesFlag = false;
     }

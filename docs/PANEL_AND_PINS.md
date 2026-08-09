@@ -9,10 +9,10 @@ Hardware mapping for **DCO4_Input_Controller** (RP2040 front panel).
 | Port | Pins | Baud | Peer |
 |------|------|------|------|
 | `Serial` | USB | 2 000 000 | Debug |
-| `Serial1` (`DCO_PORT`) | TX **GP0** → DCO GP21, RX **GP1** ← DCO GP20 | 2 500 000 | DCO — panel blocks `'a'`..`'f'`, ParamId frames, 9-byte `'q'` out; `'x'` 154/155 back in |
+| `Serial1` (`DCO_PORT`) | TX **GP0** → DCO GP21, RX **GP1** ← DCO GP20 | 2 500 000 | DCO — slim LE `'a'`–`'d'` / `'p'` / `'q'`; `'x'` 154/155 back in |
 | `Serial2` (`SCREEN_PORT`) | TX **GP4** → Screen GP13; RX **GP5** unwired | 2 500 000 | Screen — UI frames and the relayed DCO gap, TX only (the Screen never transmits) |
 
-FIFO 512, polling mode. Brought up in `setup1()`.
+FIFO 512, IRQ (`setPollingMode(false)`). Brought up in `setup1()`.
 
 Port numbers say nothing about the peer, so the code addresses each link through the aliases
 `DCO_PORT` (= `Serial1`) and `SCREEN_PORT` (= `Serial2`) declared in `Serial.h`. `Serial1` is the

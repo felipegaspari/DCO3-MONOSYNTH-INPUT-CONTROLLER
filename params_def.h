@@ -29,7 +29,7 @@ enum ParamId : uint8_t {
   PARAM_OSC2_INTERVAL            = 14,  // OSC2Interval / OSC2_interval
 
   PARAM_OSC2_DETUNE_VAL          = 15,  // OSC2Detune / OSC2DetuneVal
-  PARAM_LFO2_TO_DETUNE2          = 16,  // LFO2toOSC2DETUNE / LFO2toDETUNE2
+  PARAM_LFO2_TO_OSC2              = 16,  // LFO2toOSC2DETUNE
 
   PARAM_OSC_SYNC_MODE            = 17,  // oscSyncMode / oscSync
 
@@ -64,7 +64,7 @@ enum ParamId : uint8_t {
   // DCO3 monosynth OSC3 (match DCO / archived Mainboard)
   PARAM_OSC3_INTERVAL            = 33,  // OSC3Interval / OSC3_interval
   PARAM_OSC3_DETUNE_VAL          = 34,  // OSC3Detune / OSC3DetuneVal
-  PARAM_LFO2_TO_DETUNE3          = 35,  // LFO2toOSC3DETUNE / LFO2toDETUNE3
+  PARAM_LFO2_TO_OSC3              = 35,  // LFO2toOSC3DETUNE
 
   PARAM_SOFT_SYNC                = 36,
   PARAM_SUBOSC_DIVIDE            = 37,
@@ -155,6 +155,16 @@ enum ParamId : uint8_t {
   PARAM_UI_MENU_POSITION         = 190, // menuPos on input/screen
   PARAM_UI_CALIBRATION_DISMISS   = 199, // hide calibration UI / dialog
   PARAM_UI_CALIBRATION_MENU_MODE = 200, // enter/exit calibration menu
+
+  // LFO2 coarse pitch (DCO voice engine; relayed over serial).
+  PARAM_LFO2_TO_OSC2_COARSE      = 219,
+  PARAM_LFO2_TO_OSC3_COARSE      = 220,
+
+  PARAM_PW_VALUE                 = 210,
+  PARAM_ADSR1_TO_VCA             = 222,
+
+  // EnvDCO → pitch tap: 0 unipolar (default), 1 centered (env−16384; mid S ≈ note).
+  PARAM_ADSR3_PITCH_MODE         = 223,
 
   // --- Calibration flags (shared) ----------------------------------
   PARAM_CALIBRATION_FLAG         = 150,

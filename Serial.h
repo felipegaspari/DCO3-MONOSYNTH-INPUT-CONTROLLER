@@ -11,19 +11,24 @@
 #define DCO_PORT    Serial1
 #define SCREEN_PORT Serial2
 
-#include "serial_param_protocol.h"
-#include "serial_protocol.h"
+// #define SERIAL_FRAMING_COBS  // must match DCO; host: dco_control --cobs
+
+// Screen 'q' scroll is preset# + 16 chars (17). DCO frames stay ≤8.
+#define SERIAL_INNER_MAX_PAYLOAD 17
+
+#include "serial_input_protocol.h"
+#include "serial_frame.h"
 #include "serial_parser.h"
+#include "serial_param_protocol.h"
 
 // Forward declare types that normally come from Arduino.h so the linter
 // can understand this header in isolation.
 typedef unsigned char byte;
 
 void serial_read_from_dco();  // DCO_PORT RX (GP1 <- DCO GP20): DCO 'x' (154 forward, 155 store)
+void init_dco_link_parser();
 
 float freq;
-
-byte finishByte = 1;
 
 bool sendDetune2Flag = false;
 bool serial_send_portamentoFlag = false;

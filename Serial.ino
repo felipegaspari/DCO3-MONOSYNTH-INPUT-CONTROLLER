@@ -1,120 +1,77 @@
-// Send uint16 frame 'u' to the DCO. Currently unused helper.
-void sendUint16(uint16_t f) {
-  byte *b = (byte *)&f;
-
-  DCO_PORT.write((char *)"u");
-
-  DCO_PORT.write(b, 2);
-}
-
-// Send float bytes after 't' to the DCO. Currently unused helper.
-void sendFloat(float f) {
-  byte *b = (byte *)&f;
-
-  DCO_PORT.print("t");
-  byte ndata = 0;
-  for (int i = 0; i < 4; i++) {
-
-    DCO_PORT.write(b[i]);
-  }
-  return;
-}
-
-// Send 'k' OK to the DCO. Currently unused helper.
-void sendOK() {
-
-  DCO_PORT.write((char *)"k");
-  //Serial.println("Sent OK");
-}
-
-// Legacy autotune kick to the DCO. Currently unused.
-void serial_send_autotune() {
-  byte autotune_on = 255;
-  DCO_PORT.write((char *)"a");
-  DCO_PORT.write(autotune_on);
-  DCO_PORT.flush();
-  //Serial.println("Sent autotune on");
-}
-
 // Screen UI mode signal ('s' + byte).
 void serial_send_signal(byte signal) {
 #ifdef ENABLE_SCREEN_LINK
-
-  SCREEN_PORT.write((char *)"s");
-
-  SCREEN_PORT.write(signal);
+  serial_frame_write(SCREEN_PORT, (uint8_t)'s', &signal, 1);
 #endif
 }
 
-
-// Send 'p' 16-bit ParamId to the DCO, and to the Screen when sendToAll.
+// Send slim 'p' (id + i16 LE) to the DCO, and to the Screen when sendToAll.
 void serial_send_param_change(byte param, uint16_t paramValue, bool sendToAll) {
-  byte bytesArray[5] = { (uint8_t)'p', param, highByte(paramValue), lowByte(paramValue), finishByte };
+  uint8_t payload[INPUT_SERIAL_LEN_PARAM_16];
+  encode_param_p(payload, param, (int16_t)paramValue);
 #ifdef ENABLE_SCREEN_LINK
   if (sendToAll) {
-    SCREEN_PORT.write(bytesArray, 5);
+    serial_frame_write(SCREEN_PORT, INPUT_CMD_PARAM_16, payload, INPUT_SERIAL_LEN_PARAM_16);
   }
 #endif
 #ifdef ENABLE_DCO_LINK
-  if (paramValue != -1) {  // paramValue 100 = send to screen only
-    DCO_PORT.write(bytesArray, 5);
+  if (paramValue != (uint16_t)-1) {
+    serial_frame_write(DCO_PORT, INPUT_CMD_PARAM_16, payload, INPUT_SERIAL_LEN_PARAM_16);
   }
 #endif
 }
 
-// Send 'w' 8-bit ParamId to the DCO, and to the Screen when sendToAll.
+// Screen keeps slim 'w' [id][u8]; DCO gets 'p' (i16 zero-extended). 255 = screen-only.
 void serial_send_param_change_byte(byte param, byte paramValue, bool sendToAll) {
-  byte bytesArrayByte[4] = { (uint8_t)'w', param, paramValue, finishByte };
 #ifdef ENABLE_SCREEN_LINK
   if (sendToAll) {
-    SCREEN_PORT.write(bytesArrayByte, 4);
+    uint8_t w[SERIAL_LEN_PARAM_8];
+    encode_param_w(w, param, paramValue);
+    serial_frame_write(SCREEN_PORT, (uint8_t)'w', w, SERIAL_LEN_PARAM_8);
   }
 #endif
 #ifdef ENABLE_DCO_LINK
-  if (paramValue != -1) {  // paramValue 100 = send to screen only
-    DCO_PORT.write(bytesArrayByte, 4);
+  if (paramValue != (byte)-1) {
+    uint8_t p[INPUT_SERIAL_LEN_PARAM_16];
+    encode_param_p(p, param, (int16_t)paramValue);
+    serial_frame_write(DCO_PORT, INPUT_CMD_PARAM_16, p, INPUT_SERIAL_LEN_PARAM_16);
   }
 #endif
 }
 
 // Send preset name (8 chars) to the DCO via 'q'.
 void serial_send_preset_name_to_mainboard() {
-  DCO_PORT.write((char *)"q");
-  // DCO-side 'q' (input link) expects 8 chars; send first 8 only.
-  DCO_PORT.write(presetNameVal, 8);
-  DCO_PORT.write(finishByte);
+#ifdef ENABLE_DCO_LINK
+  serial_frame_write(DCO_PORT, INPUT_CMD_PRESET_NAME, presetNameVal, INPUT_SERIAL_LEN_PRESET_NAME);
+#endif
 }
 
 // Send preset scroll (number + 16-char name) to the Screen via 'q'.
 void serial_send_preset_scroll(byte presetNumber, byte presetNameSerial[]) {
-
 #ifdef ENABLE_SCREEN_LINK
-
-  SCREEN_PORT.write((char *)"q");
-
-  SCREEN_PORT.write(presetNumber);
-  // Screen-side 'q' uses 16-character names.
-  SCREEN_PORT.write(presetNameSerial, 16);
-  SCREEN_PORT.write(finishByte);
+  uint8_t payload[17];
+  payload[0] = presetNumber;
+  for (uint8_t i = 0; i < 16; ++i) {
+    payload[1 + i] = presetNameSerial[i];
+  }
+  serial_frame_write(SCREEN_PORT, (uint8_t)'q', payload, 17);
 #endif
 }
 
 // Send save-name character position to the Screen via 'c'.
 void serial_send_save_char_select(byte serialPresetChar) {
 #ifdef ENABLE_SCREEN_LINK
-
-  SCREEN_PORT.write((char *)"c");
-
-  SCREEN_PORT.write(serialPresetChar);
+  serial_frame_write(SCREEN_PORT, (uint8_t)'c', &serialPresetChar, 1);
 #endif
 }
 
 // Send 'y' byte param to the Screen.
 void serialSendParamByteToScreen(byte paramNumber, byte paramValue)
 {
- while(SCREEN_PORT.availableForWrite() < 1) {};
-  byte bytesArray[4] = {(uint8_t)'y', paramNumber, paramValue, finishByte};
-  SCREEN_PORT.write(bytesArray, 4);
+#ifdef ENABLE_SCREEN_LINK
+  uint8_t payload[2] = { paramNumber, paramValue };
+  serial_frame_write(SCREEN_PORT, (uint8_t)'y', payload, 2);
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -122,19 +79,12 @@ void serialSendParamByteToScreen(byte paramNumber, byte paramValue)
 // (GP1 <- DCO GP20).
 // ---------------------------------------------------------------------------
 
-// Forward a decoded PARAM_32 payload as a full 'x' frame to the Screen (GP4 -> Screen GP13).
 static void serial_forward_param32_to_screen(const uint8_t* payload, uint8_t len) {
 #ifdef ENABLE_SCREEN_LINK
-  if (len != SERIAL_PAYLOAD_LEN_PARAM_32) {
+  if (len != INPUT_SERIAL_LEN_PARAM_32) {
     return;
   }
-  byte bytesArray[7] = {
-    (uint8_t)'x',
-    payload[0], payload[1], payload[2], payload[3], payload[4],
-    finishByte
-  };
-  while (SCREEN_PORT.availableForWrite() < 1) {}
-  SCREEN_PORT.write(bytesArray, 7);
+  serial_frame_write(SCREEN_PORT, INPUT_CMD_PARAM_32, payload, len);
 #else
   (void)payload;
   (void)len;
@@ -146,7 +96,7 @@ static void serial_forward_param32_to_screen(const uint8_t* payload, uint8_t len
 //   155 PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO → store + optional 'y' echo
 //   value (uint32) lower 16 bits for 155 = [oscIndex:8 | offset:8]
 static void input_handle_param32_from_dco(char, const uint8_t* payload, uint8_t len) {
-  if (len != SERIAL_PAYLOAD_LEN_PARAM_32) {
+  if (len != INPUT_SERIAL_LEN_PARAM_32) {
     return;
   }
 
@@ -168,9 +118,6 @@ static void input_handle_param32_from_dco(char, const uint8_t* payload, uint8_t 
 
   if (oscIndex < NUM_OSCILLATORS) {
     manualCalibrationInitAmpCompOffset[oscIndex] = offset;
-    // If we are currently in manual calibration and this oscillator
-    // matches the selected stage, push the freshly loaded offset to
-    // the screen so the initial value reflects the DCO's stored one.
     if (manualCalibration) {
       uint8_t currentIndex = (uint8_t)manualCalibrationStage / 2;
       if (oscIndex == currentIndex) {
@@ -183,42 +130,23 @@ static void input_handle_param32_from_dco(char, const uint8_t* payload, uint8_t 
   }
 }
 
-// Command table and parser context for the DCO link RX (DCO → Input).
 static const SerialCommandDef dcoLinkCommands[] = {
-  { SERIAL_CMD_PARAM_32, SERIAL_PAYLOAD_LEN_PARAM_32, input_handle_param32_from_dco },
+  { INPUT_CMD_PARAM_32, INPUT_SERIAL_LEN_PARAM_32, input_handle_param32_from_dco },
 };
 
-static SerialParserContext dcoLinkParser = {
-  SERIAL_WAIT_FOR_CMD,
-  0,
-  {0},
-  0,
-  0,
-  0
-};
+static SerialCommandTable dcoLinkLut;
+static SerialParserContext dcoLinkParser = {};
 
-// Core1: non-blocking parser pump for inbound DCO 'x' frames.
-// The DCO link is in polling mode, so bytes only leave the 32-byte hardware FIFO
-// when this runs — roughly every 128 us of headroom at 2.5 Mbaud.
+void init_dco_link_parser() {
+  serial_command_table_init(
+    dcoLinkLut,
+    dcoLinkCommands,
+    sizeof(dcoLinkCommands) / sizeof(dcoLinkCommands[0])
+  );
+}
+
 void serial_read_from_dco() {
 #ifdef ENABLE_DCO_LINK
-  if (dcoLinkParser.state == SERIAL_READ_PAYLOAD) {
-    uint32_t now = micros();
-    serial_parser_check_timeout(dcoLinkParser, now);
-  }
-
-  if (DCO_PORT.available() > 0) {
-    uint32_t now = micros();
-    while (DCO_PORT.available() > 0) {
-      uint8_t b = DCO_PORT.read();
-      serial_parser_process_byte(
-        dcoLinkParser,
-        dcoLinkCommands,
-        sizeof(dcoLinkCommands) / sizeof(dcoLinkCommands[0]),
-        b,
-        now
-      );
-    }
-  }
+  serial_parser_drain(dcoLinkParser, dcoLinkLut, DCO_PORT, SERIAL_DRAIN_BYTE_BUDGET);
 #endif
 }

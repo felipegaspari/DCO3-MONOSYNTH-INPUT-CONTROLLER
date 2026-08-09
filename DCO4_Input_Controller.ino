@@ -6,8 +6,8 @@
 #define NUM_OSCILLATORS 3
 
 int8_t OSC1Interval = 24;
-int8_t OSC2Interval = 24;
-int8_t OSC3Interval = 24;
+int8_t OSC2Interval = 36;  // 36 ⇒ unison with OSC1 (wire bias; display = value - 36)
+int8_t OSC3Interval = 36;
 int16_t OSC2Detune = 0;
 int16_t OSC3Detune = 0;
 float DETUNE1;
@@ -66,16 +66,17 @@ void setup1() {
   // Serial1: TX GP0 -> DCO GP21, RX GP1 <- DCO GP20
   DCO_PORT.setRX(1);
   DCO_PORT.setTX(0);
-  DCO_PORT.setPollingMode(true);
+  DCO_PORT.setPollingMode(false);
   DCO_PORT.setFIFOSize(512);
   DCO_PORT.begin(2500000);
+  init_dco_link_parser();
 #endif
 
 #ifdef ENABLE_SCREEN_LINK
   // Serial2: TX GP4 -> Screen GP13; RX GP5 unwired
   SCREEN_PORT.setRX(5);
   SCREEN_PORT.setTX(4);
-  SCREEN_PORT.setPollingMode(true);
+  SCREEN_PORT.setPollingMode(false);
   SCREEN_PORT.setFIFOSize(512);
   SCREEN_PORT.begin(2500000);
 #endif

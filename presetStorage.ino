@@ -365,7 +365,8 @@ delay(2);
 
 delay(2);
 
-  // serial_send_param_change(ParamId::PARAM_PW_VALUE,    (uint16_t)PW, false);  /// implementation required
+  serial_send_param_change(ParamId::PARAM_PW_VALUE, (uint16_t)PW, false);
+  serial_send_param_change(ParamId::PARAM_ADSR1_TO_VCA, (uint16_t)ADSR1toVCA, false);
 
   serial_send_param_change(ParamId::PARAM_LFO1_TO_DCO, (uint16_t)LFO1toDCO,  false);
 
@@ -387,8 +388,8 @@ delay(2);
 
   serial_send_param_change(ParamId::PARAM_OSC2_DETUNE_VAL,  (uint16_t)OSC2Detune,       false);
   serial_send_param_change(ParamId::PARAM_OSC3_DETUNE_VAL,  (uint16_t)OSC3Detune,       false);
-  serial_send_param_change(ParamId::PARAM_LFO2_TO_DETUNE2,  (uint16_t)LFO2toOSC2DETUNE, false);
-  serial_send_param_change_byte(ParamId::PARAM_LFO2_TO_DETUNE3, (uint8_t)LFO2toOSC3DETUNE, false);
+  serial_send_param_change(ParamId::PARAM_LFO2_TO_OSC2,  (uint16_t)LFO2toOSC2DETUNE, false);
+  serial_send_param_change_byte(ParamId::PARAM_LFO2_TO_OSC3, (uint8_t)LFO2toOSC3DETUNE, false);
 delay(2);
   serial_send_manual_controls(true);  
   

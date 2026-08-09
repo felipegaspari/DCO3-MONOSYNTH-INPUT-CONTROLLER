@@ -15,9 +15,9 @@ All detailed documentation lives under **[`docs/`](docs/)**. This README is the 
 | Doc | Status | Contents |
 |-----|--------|----------|
 | [`docs/SYSTEM_OVERVIEW.md`](docs/SYSTEM_OVERVIEW.md) | Current | Stub → canonical three-board overview + local UART table |
-| [`docs/CONTROL_PIPELINE.md`](docs/CONTROL_PIPELINE.md) | Current | Dual-core scan → ParamId / `'a'..'f'` → DCO & Screen; DCO `'x'` relay |
+| [`docs/CONTROL_PIPELINE.md`](docs/CONTROL_PIPELINE.md) | Current | Dual-core scan → slim LE `'a'`–`'d'` / `'p'` → DCO & Screen; DCO `'x'` relay |
 | [`docs/PANEL_AND_PINS.md`](docs/PANEL_AND_PINS.md) | Current | Mux, fader/pot indices, LED/UART pins |
-| [`docs/PRESETS.md`](docs/PRESETS.md) | Current | LittleFS bank, 180-byte slots (v1), load/save |
+| [`docs/PRESETS.md`](docs/PRESETS.md) | Current | Preset ownership, UI FSM, load/save, 180-byte v1 layout |
 | [`docs/FILE_INDEX.md`](docs/FILE_INDEX.md) | Current | Every file + functions + call sites |
 | [`docs/REFERENCE_AI.md`](docs/REFERENCE_AI.md) | Current | Deep semantic map for developers / AI |
 | [`docs/README_serial_and_params.md`](docs/README_serial_and_params.md) | Current | Shared serial / ParamId how-to |
@@ -80,6 +80,7 @@ Mux select GP18–21; analog SIG GP27; digital SIG GP2/16/17. Full map: [`docs/P
 | `ENABLE_SERIAL` | on | USB debug |
 | `ENABLE_DCO_LINK` | on | DCO UART (`DCO_PORT` = `Serial1`) |
 | `ENABLE_SCREEN_LINK` | on | Screen UART (`SCREEN_PORT` = `Serial2`) |
+| `SERIAL_FRAMING_COBS` | **off** (commented) | Must match DCO/Screen; host: `dco_control --cobs` |
 | `NUM_VOICES` | **1** | Array sizing (monosynth) |
 | `NUM_OSCILLATORS` | **3** | Cal offset array / stage → osc index |
 
