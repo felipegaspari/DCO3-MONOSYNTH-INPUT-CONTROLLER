@@ -3,7 +3,7 @@
 
 #include <RoxMux_fela.h>
 //#include <light_CD74HC4067.h>
-#include <MD_REncoder_fela.h>
+#include "_build_libs/MD_REncoder_fela/src/MD_REncoder_fela.h"
 #include <CD74HC4067.h>
 //#include "analogmuxdemux.h"
 

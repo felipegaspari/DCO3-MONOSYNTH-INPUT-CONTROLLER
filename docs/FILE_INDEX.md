@@ -430,7 +430,7 @@ All detailed docs live under `docs/` (this file included). Root `README.md` is t
 |---------|---------|
 | `RoxMux` (74HC595) | `LED_control.*` |
 | `RoxMux_fela` (`RoxButton`) | `Controls.h` / `buttons.*` |
-| `MD_REncoder_fela` | `Controls.h` / `encoders.*` |
+| `MD_REncoder_fela` (`_build_libs` → `../../MD_REncoder_FELA`) | `Controls.h` / `encoders.*` / `include_all.h` |
 | `CD74HC4067` | `Controls.*` |
 | `SimpleKalmanFilter` | `auxiliary.h` / `read_AnalogMux` |
 | `LittleFS` | `FS.h` / `presetStorage.ino` |
