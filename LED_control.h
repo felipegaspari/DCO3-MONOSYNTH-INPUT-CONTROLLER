@@ -1,7 +1,9 @@
 #ifndef __LED_CONTROL_H__
 #define __LED_CONTROL_H__
 
-#include <RoxMux.h>
+#include "sram_hot.h"
+
+#include "_build_libs/RoxMux_fela/src/RoxMux_fela.h"
 
 Rox74HC595<2> LED_Control_Mux;
 
@@ -19,4 +21,8 @@ uint8_t LEDPins[16] = { 5, 4, 3, 2, 1, 0, 7, 6, 11, 12, 9, 10, 8, 8, 8, 8 };
 
 bool LEDState[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 bool LEDBlink[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+void init_LED_control();
+void set_LED_Status(byte LEDNumber, byte LEDStatus);
+void update_LED_Control(byte LEDnumber, byte LEDStatus);
 #endif

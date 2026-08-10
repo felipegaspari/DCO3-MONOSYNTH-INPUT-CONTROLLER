@@ -1,5 +1,6 @@
 
 #include "Arduino.h"
+#include "sram_hot.h"
 //#include <Adafruit_TinyUSB.h>
 
 #define NUM_VOICES 1
@@ -94,7 +95,7 @@ void setup1() {
   analogWrite(PIN_LED_PWM, 245);
 }
 
-void loop1() {
+void __not_in_flash_func(loop1)() {
   // Core1: map manual controls, TX blocks, LED refresh, DCO 'x' relay.
 
   unsigned long loopStartMicros = micros();
@@ -135,7 +136,7 @@ void loop1() {
   serial_read_from_dco();
 }
 
-void loop() {
+void __not_in_flash_func(loop)() {
   // Core0: soft timers + panel scan (mux / encoders / buttons).
 
   // loopStartTime = micros();

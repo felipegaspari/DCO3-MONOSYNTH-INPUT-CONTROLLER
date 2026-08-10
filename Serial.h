@@ -1,6 +1,8 @@
 #ifndef __SERIAL_H__
 #define __SERIAL_H__
 
+#include "sram_hot.h"
+
 #define ENABLE_SERIAL
 
 // Wiring (do not infer the peer from the port number):
@@ -42,8 +44,11 @@ bool serialSendADSR3ControlValuesFlag = false;
 bool serialSendADSR3toDCOFlag = false;
 bool serialSendADSR3ToOscSelectFlag = false;
 
+void serial_send_signal(byte signal);
 void serial_send_param_change_byte(byte param, byte paramValue, bool sendToAll = true);
 void serial_send_param_change(byte param, uint16_t paramValue, bool sendToAll = true);
+void serialSendParamByteToScreen(byte paramNumber, byte paramValue);
+void serial_send_manual_controls(bool presetLoading);
 
 #endif
 

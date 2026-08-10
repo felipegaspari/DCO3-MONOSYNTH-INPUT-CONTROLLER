@@ -1,10 +1,12 @@
 #ifndef __CONTROLS_H__
 #define __CONTROLS_H__
 
-#include <RoxMux_fela.h>
+#include "sram_hot.h"
+
+#include "_build_libs/RoxMux_fela/src/RoxMux_fela.h"
 //#include <light_CD74HC4067.h>
 #include "_build_libs/MD_REncoder_fela/src/MD_REncoder_fela.h"
-#include <CD74HC4067.h>
+#include "_build_libs/CD74HC4067/src/CD74HC4067.h"
 //#include "analogmuxdemux.h"
 
 // #define PIN_SAW1 42
@@ -166,5 +168,11 @@ byte presetNameVal[17] = { 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32 };
 byte loadedName[17];
 
 bool funcKeyOn = false;
+
+void init_controls();
+void readControls();
+void setControlValues();
+void read_AnalogMux();
+void read_digitalMux(bool readPots);
 
 #endif

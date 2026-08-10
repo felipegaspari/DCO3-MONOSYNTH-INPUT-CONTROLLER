@@ -3,6 +3,7 @@
 
 
 #include "Arduino.h"
+#include "sram_hot.h"
 //#include <Adafruit_TinyUSB.h>
 
 // Shared parameter ID definitions reused across all MCUs.
@@ -14,9 +15,7 @@
 #include "Timers_millis.h"
 #include "Serial.h"
 #include "buttons.h"
-#include "_build_libs/MD_REncoder_fela/src/MD_REncoder_fela.h"
 #include "encoders.h"
-
 #include "Controls.h"
 
 

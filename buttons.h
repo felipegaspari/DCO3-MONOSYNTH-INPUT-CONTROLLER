@@ -1,6 +1,9 @@
 #ifndef __BUTTONS_H__
 #define __BUTTONS_H__
 
+#include "sram_hot.h"
+#include "_build_libs/RoxMux_fela/src/RoxMux_fela.h"
+
 #define NUM_BUTTONS 16
 
 bool buttonIsLatched[NUM_BUTTONS];
@@ -125,5 +128,13 @@ ButtonAction buttonActionSelected = BTN_ACTION_NONE;
 unsigned long buttonActionSelectedMillis = 0;
 unsigned long buttonActionSelectedTimeout = 2000;
 bool buttonActionIsSelected  = false;
+
+void read_encoder_buttons();
+void handleLatchedButton(int i);
+void handleHeldButton(int i);
+void handleDoublePressedButton(int i);
+void handlePressedButton(int i);
+void handleReleasedButton(int i);
+void handleUnlatchedButton(int i);
 
 #endif

@@ -428,10 +428,9 @@ All detailed docs live under `docs/` (this file included). Root `README.md` is t
 
 | Library | Used by |
 |---------|---------|
-| `RoxMux` (74HC595) | `LED_control.*` |
-| `RoxMux_fela` (`RoxButton`) | `Controls.h` / `buttons.*` |
+| `RoxMux_fela` (`_build_libs` → `../../RoxMux_FELA`) | `LED_control.*` / `Controls.h` / `buttons.*` / `include_all.h` |
 | `MD_REncoder_fela` (`_build_libs` → `../../MD_REncoder_FELA`) | `Controls.h` / `encoders.*` / `include_all.h` |
-| `CD74HC4067` | `Controls.*` |
+| `CD74HC4067` (`_build_libs` → `../../CD74HC4067_FELA`) | `Controls.*` / `include_all.h` |
 | `SimpleKalmanFilter` | `auxiliary.h` / `read_AnalogMux` |
 | `LittleFS` | `FS.h` / `presetStorage.ino` |
 | TinyUSB / Adafruit TinyUSB | Config present (`tusb_config.h`); sketch include **commented** |

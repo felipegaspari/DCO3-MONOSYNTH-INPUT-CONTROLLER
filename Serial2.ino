@@ -1,4 +1,4 @@
-static inline void pack_u16_le4(uint8_t* dst, uint16_t a, uint16_t b, uint16_t c, uint16_t d) {
+static inline INPUT_ALWAYS_INLINE void pack_u16_le4(uint8_t* dst, uint16_t a, uint16_t b, uint16_t c, uint16_t d) {
   encode_u16_le(dst + 0, a);
   encode_u16_le(dst + 2, b);
   encode_u16_le(dst + 4, c);
@@ -6,7 +6,7 @@ static inline void pack_u16_le4(uint8_t* dst, uint16_t a, uint16_t b, uint16_t c
 }
 
 // @1 ms / preset load: TX manual control blocks to the DCO, and 'a'/'b' to the Screen.
-void serial_send_manual_controls(bool presetLoading) {
+void __not_in_flash_func(serial_send_manual_controls)(bool presetLoading) {
   if (faderRow1ControlManual || presetLoading) {
     uint8_t dataArrayDCO[8];
     uint16_t ADSR1_attack_serial  = linToExpLookup[ADSR1_attack];

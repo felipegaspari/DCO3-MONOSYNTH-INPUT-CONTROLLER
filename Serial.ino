@@ -1,12 +1,12 @@
 // Screen UI mode signal ('s' + byte).
-void serial_send_signal(byte signal) {
+void __not_in_flash_func(serial_send_signal)(byte signal) {
 #ifdef ENABLE_SCREEN_LINK
   serial_frame_write(SCREEN_PORT, (uint8_t)'s', &signal, 1);
 #endif
 }
 
 // Send slim 'p' (id + i16 LE) to the DCO, and to the Screen when sendToAll.
-void serial_send_param_change(byte param, uint16_t paramValue, bool sendToAll) {
+void __not_in_flash_func(serial_send_param_change)(byte param, uint16_t paramValue, bool sendToAll) {
   uint8_t payload[INPUT_SERIAL_LEN_PARAM_16];
   encode_param_p(payload, param, (int16_t)paramValue);
 #ifdef ENABLE_SCREEN_LINK
@@ -22,7 +22,7 @@ void serial_send_param_change(byte param, uint16_t paramValue, bool sendToAll) {
 }
 
 // Screen keeps slim 'w' [id][u8]; DCO gets 'p' (i16 zero-extended). 255 = screen-only.
-void serial_send_param_change_byte(byte param, byte paramValue, bool sendToAll) {
+void __not_in_flash_func(serial_send_param_change_byte)(byte param, byte paramValue, bool sendToAll) {
 #ifdef ENABLE_SCREEN_LINK
   if (sendToAll) {
     uint8_t w[SERIAL_LEN_PARAM_8];
@@ -66,7 +66,7 @@ void serial_send_save_char_select(byte serialPresetChar) {
 }
 
 // Send 'y' byte param to the Screen.
-void serialSendParamByteToScreen(byte paramNumber, byte paramValue)
+void __not_in_flash_func(serialSendParamByteToScreen)(byte paramNumber, byte paramValue)
 {
 #ifdef ENABLE_SCREEN_LINK
   uint8_t payload[2] = { paramNumber, paramValue };
@@ -79,7 +79,7 @@ void serialSendParamByteToScreen(byte paramNumber, byte paramValue)
 // (GP1 <- DCO GP20).
 // ---------------------------------------------------------------------------
 
-static void serial_forward_param32_to_screen(const uint8_t* payload, uint8_t len) {
+static void __not_in_flash_func(serial_forward_param32_to_screen)(const uint8_t* payload, uint8_t len) {
 #ifdef ENABLE_SCREEN_LINK
   if (len != INPUT_SERIAL_LEN_PARAM_32) {
     return;
@@ -108,7 +108,7 @@ static void serial_forward_param16_to_screen(const uint8_t* payload, uint8_t len
 //   154 PARAM_GAP_FROM_DCO → forward the same 'x' on to the Screen
 //   155 PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO → store + optional 'y' echo
 //   value (uint32) lower 16 bits for 155 = [oscIndex:8 | offset:8]
-static void input_handle_param32_from_dco(char, const uint8_t* payload, uint8_t len) {
+static void __not_in_flash_func(input_handle_param32_from_dco)(char, const uint8_t* payload, uint8_t len) {
   if (len != INPUT_SERIAL_LEN_PARAM_32) {
     return;
   }
@@ -292,7 +292,7 @@ void init_dco_link_parser() {
   );
 }
 
-void serial_read_from_dco() {
+void __not_in_flash_func(serial_read_from_dco)() {
 #ifdef ENABLE_DCO_LINK
   serial_parser_drain(dcoLinkParser, dcoLinkLut, DCO_PORT, SERIAL_DRAIN_BYTE_BUDGET);
 #endif

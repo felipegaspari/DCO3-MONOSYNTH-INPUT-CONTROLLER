@@ -1,7 +1,7 @@
 #include "include_all.h"
 #include "_build_libs/MD_REncoder_fela/src/MD_REncoder_fela.cpp"
 // Core0 ~99 µs: read all encoders and dispatch EncoderAction (ParamId / UI / cal).
-void read_encoders() {
+void __not_in_flash_func(read_encoders)() {
 
   if ((millis() - encoderActionSelectedMillis) > encoderActionSelectedTimeout) {
     encoderActionSelected = ACTION_NONE;

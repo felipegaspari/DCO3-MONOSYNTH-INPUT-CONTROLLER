@@ -1,6 +1,8 @@
 #ifndef __AUX_H__
 #define __AUX_H__
 
+#include "sram_hot.h"
+
 #include <SimpleKalmanFilter.h>
 
 static constexpr float e_mea = 30;  // Measurement Uncertainty 

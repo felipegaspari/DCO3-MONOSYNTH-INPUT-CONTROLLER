@@ -1,5 +1,5 @@
 // Core0: clear/set soft-timer flags for the panel-scan loop.
-void millisTimer() {
+void __not_in_flash_func(millisTimer)() {
 
   timer50microsFlag = 0;
   timer99microsFlag = 0;
@@ -86,7 +86,7 @@ void millisTimer() {
 }
 
 // Core1: soft-timer flags for serial/LED loop (*Flag2).
-void millisTimer2() {
+void __not_in_flash_func(millisTimer2)() {
 
   timer50microsFlag2 = 0;
   timer99microsFlag2 = 0;

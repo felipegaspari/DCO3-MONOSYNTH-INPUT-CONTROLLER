@@ -1,6 +1,9 @@
 #ifndef __ENCODERS_H__
 #define __ENCODERS_H__
 
+#include "sram_hot.h"
+#include "_build_libs/MD_REncoder_fela/src/MD_REncoder_fela.h"
+
 enum EncoderAction {
   ACTION_NONE,
 
@@ -98,5 +101,6 @@ int8_t menuPos = 0;
 int8_t menuPosMax = 0;
 int8_t menuValue = 0;
 
+void read_encoders();
 
 #endif

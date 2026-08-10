@@ -2,6 +2,7 @@
 #define SERIAL_INPUT_PROTOCOL_H
 
 #include <stdint.h>
+#include "sram_hot.h"
 
 // -----------------------------------------------------------------------------
 // DCO ↔ Input (and USB bench) inner protocol: command bytes + payload sizes.
@@ -46,7 +47,7 @@ static constexpr uint8_t INPUT_SERIAL_LEN_PRESET_NAME  = 8;
 // Param32 ('x'): [id:u8][value:u32 LE] — DCO→Input gap/cal; Input relays 154 to Screen.
 static constexpr uint8_t INPUT_SERIAL_LEN_PARAM_32     = 5;
 
-static inline uint8_t serial_input_payload_len(uint8_t cmd) {
+static inline INPUT_ALWAYS_INLINE uint8_t serial_input_payload_len(uint8_t cmd) {
   switch (cmd) {
     case INPUT_CMD_ADSR1_BLOCK:
     case INPUT_CMD_ADSR2_BLOCK:

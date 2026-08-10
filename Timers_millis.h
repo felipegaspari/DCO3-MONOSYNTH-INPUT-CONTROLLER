@@ -57,4 +57,7 @@ bool timer67msFlag2 = 0;
 bool timer200msFlag2 = 0;
 //bool timer500msFlag2 = 0;
 
+void millisTimer();
+void millisTimer2();
+
 #endif

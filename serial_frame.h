@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "sram_hot.h"
 #include "serial_input_protocol.h"
 
 // -----------------------------------------------------------------------------
@@ -37,7 +38,7 @@ static constexpr uint8_t SERIAL_STUFFED_MAX =
     (uint8_t)(1u + SERIAL_INNER_MAX_PAYLOAD + 1u + 1u);
 
 // Pack inner [cmd][payload] into dst. Returns inner length (1 + payload_len).
-static inline uint8_t serial_inner_pack(uint8_t* dst, uint8_t cmd,
+static inline INPUT_ALWAYS_INLINE uint8_t serial_inner_pack(uint8_t* dst, uint8_t cmd,
                                         const uint8_t* payload, uint8_t payload_len)
 {
   dst[0] = cmd;
@@ -48,7 +49,7 @@ static inline uint8_t serial_inner_pack(uint8_t* dst, uint8_t cmd,
 }
 
 // Split a decoded inner blob into cmd + payload. Returns false if empty.
-static inline bool serial_inner_unpack(const uint8_t* inner, uint8_t inner_len,
+static inline INPUT_ALWAYS_INLINE bool serial_inner_unpack(const uint8_t* inner, uint8_t inner_len,
                                        uint8_t& cmd, const uint8_t*& payload,
                                        uint8_t& payload_len)
 {
@@ -61,7 +62,7 @@ static inline bool serial_inner_unpack(const uint8_t* inner, uint8_t inner_len,
 
 // Consistent Overhead Byte Stuffing. dst never contains 0x00.
 // Returns bytes written, or -1 if dst_cap is too small / src invalid.
-static inline int serial_cobs_encode(const uint8_t* src, uint8_t src_len,
+static inline INPUT_ALWAYS_INLINE int serial_cobs_encode(const uint8_t* src, uint8_t src_len,
                                      uint8_t* dst, uint8_t dst_cap)
 {
   if (dst_cap < 1) return -1;
@@ -96,7 +97,7 @@ static inline int serial_cobs_encode(const uint8_t* src, uint8_t src_len,
 }
 
 // Decode stuffed bytes (no trailing 0x00). Returns decoded length, or -1 on error.
-static inline int serial_cobs_decode(const uint8_t* src, uint8_t src_len,
+static inline INPUT_ALWAYS_INLINE int serial_cobs_decode(const uint8_t* src, uint8_t src_len,
                                      uint8_t* dst, uint8_t dst_cap)
 {
   uint8_t dst_len = 0;
@@ -119,7 +120,7 @@ static inline int serial_cobs_decode(const uint8_t* src, uint8_t src_len,
 }
 
 // Pack inner, then RAW copy or COBS+0x00 into dst. Returns on-wire length, or -1.
-static inline int serial_frame_stuff(uint8_t cmd, const uint8_t* payload,
+static inline INPUT_ALWAYS_INLINE int serial_frame_stuff(uint8_t cmd, const uint8_t* payload,
                                      uint8_t payload_len, uint8_t* dst,
                                      uint8_t dst_cap)
 {
@@ -141,7 +142,7 @@ static inline int serial_frame_stuff(uint8_t cmd, const uint8_t* payload,
 
 // Inverse of serial_frame_stuff. COBS: trailing 0x00 optional (stripped if present).
 // Copies payload into payload_out. Returns false on empty / corrupt / overflow.
-static inline bool serial_frame_unstuff(const uint8_t* wire, uint8_t wire_len,
+static inline INPUT_ALWAYS_INLINE bool serial_frame_unstuff(const uint8_t* wire, uint8_t wire_len,
                                         uint8_t& cmd, uint8_t* payload_out,
                                         uint8_t& payload_len)
 {
@@ -166,7 +167,7 @@ static inline bool serial_frame_unstuff(const uint8_t* wire, uint8_t wire_len,
 
 // Write one inner frame onto any stream with write(buf, n). UART today; SPI later.
 template<typename StreamT>
-static inline void serial_frame_write(StreamT& stream, uint8_t cmd,
+static inline INPUT_ALWAYS_INLINE void serial_frame_write(StreamT& stream, uint8_t cmd,
                                       const uint8_t* payload, uint8_t payload_len)
 {
   uint8_t buf[SERIAL_STUFFED_MAX];

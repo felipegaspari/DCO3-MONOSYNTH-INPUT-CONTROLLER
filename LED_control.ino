@@ -9,7 +9,7 @@ void init_LED_control() {
 }
 
 // Update one LED or (LEDNumber==16) refresh all from wave/manual status flags.
-void set_LED_Status(byte LEDNumber, byte LEDStatus) {
+void __not_in_flash_func(set_LED_Status)(byte LEDNumber, byte LEDStatus) {
 
   if (LEDNumber == 16) {
 
@@ -39,7 +39,7 @@ void set_LED_Status(byte LEDNumber, byte LEDStatus) {
 }
 
 // Write LEDState[] to the 595 mux pins (call update separately on timer).
-void update_LED_Control(byte LEDnumber, byte LEDStatus) {
+void __not_in_flash_func(update_LED_Control)(byte LEDnumber, byte LEDStatus) {
 
   if (LEDnumber == 16) {
 

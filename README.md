@@ -71,7 +71,7 @@ Mux select GP18–21; analog SIG GP27; digital SIG GP2/16/17. Full map: [`docs/P
 
 - **Toolchain:** Arduino IDE / CLI with Earle Philhower RP2040 core (or compatible).
 - **Sketch:** `DCO4_Input_Controller.ino`.
-- **Libraries:** `RoxMux` / `RoxMux_fela`, `CD74HC4067`, `SimpleKalmanFilter`, LittleFS (core). `MD_REncoder_fela` is `_build_libs/MD_REncoder_fela` → `../../MD_REncoder_FELA` (not sketchbook).
+- **Libraries:** `SimpleKalmanFilter`, LittleFS (core). `RoxMux_fela` is `_build_libs/RoxMux_fela` → `../../RoxMux_FELA`. `MD_REncoder_fela` is `_build_libs/MD_REncoder_fela` → `../../MD_REncoder_FELA`. `CD74HC4067` is `_build_libs/CD74HC4067` → `../../CD74HC4067_FELA` (not sketchbook).
 
 ### Feature flags
 

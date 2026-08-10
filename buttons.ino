@@ -1,6 +1,6 @@
 #include "include_all.h"
 // Core0 ~99 µs: update RoxButtons from mux and dispatch ButtonAction handlers.
-void read_encoder_buttons() {
+void __not_in_flash_func(read_encoder_buttons)() {
 
   if ((millis() - buttonActionSelectedMillis) > buttonActionSelectedTimeout) {
     buttonActionSelected = BTN_ACTION_NONE;
@@ -548,7 +548,7 @@ void read_encoder_buttons() {
 }
 
 // Dispatch latched-button action for button index i.
-void handleLatchedButton(int i) {
+void __not_in_flash_func(handleLatchedButton)(int i) {
   if (i <= 6) {
     buttonIsLatched[i] = true;
     update_LED_Control(i, true);
@@ -557,25 +557,25 @@ void handleLatchedButton(int i) {
 }
 
 // Dispatch held-button action for button index i.
-void handleHeldButton(int i) {
+void __not_in_flash_func(handleHeldButton)(int i) {
   ButtonStruct& button = buttons[i];
   currentButtonAction = funcKeyOn ? button.actionHeldAlt : button.actionHeld;
 }
 
 // Dispatch double-press action for button index i.
-void handleDoublePressedButton(int i) {
+void __not_in_flash_func(handleDoublePressedButton)(int i) {
   ButtonStruct& button = buttons[i];
   currentButtonAction = button.actionDouble;
 }
 
 // Dispatch press action for button index i.
-void handlePressedButton(int i) {
+void __not_in_flash_func(handlePressedButton)(int i) {
   ButtonStruct& button = buttons[i];
   currentButtonAction = funcKeyOn ? button.actionPressedAlt : button.actionPressed;
 }
 
 // Dispatch release action for button index i.
-void handleReleasedButton(int i) {
+void __not_in_flash_func(handleReleasedButton)(int i) {
   ButtonStruct& button = buttons[i];
   if (i <= 6) {
     buttonIsLatched[i] = false;
@@ -586,7 +586,7 @@ void handleReleasedButton(int i) {
 }
 
 // Dispatch unlatch action for button index i.
-void handleUnlatchedButton(int i) {
+void __not_in_flash_func(handleUnlatchedButton)(int i) {
   if (i <= 6) {
     buttonIsLatched[i] = false;
     set_LED_Status(16, 0);

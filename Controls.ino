@@ -1,3 +1,4 @@
+#include "_build_libs/CD74HC4067/src/CD74HC4067.cpp"
 // Boot Core0: 12-bit ADC, encoders begin, mux GPIO directions.
 void init_controls() {
   analogReadResolution(12);
@@ -27,7 +28,7 @@ void init_controls() {
 }
 
 // Core0 hot path: scan mux (analog on 1 ms) and encoders/buttons (~99 µs).
-void readControls() {
+void __not_in_flash_func(readControls)() {
 
   if (timer1msFlag) {
     read_digitalMux(1);
@@ -47,7 +48,7 @@ void readControls() {
 }
 
 // Core1 @1 ms: map filtered fader/pot ADC into locals when manual flags are set.
-void setControlValues() {
+void __not_in_flash_func(setControlValues)() {
 
   if (faderRow1ControlManual) {
     ADSR1_attack = map(constrain(muxAnalogData[fader1ArrayPos], 20, 4085), 20, 4085, 0, 4095);
@@ -99,7 +100,7 @@ void setControlValues() {
 }
 
 // Apply dual Kalman filters to muxAnalogRaw[] → muxAnalogData[].
-void read_AnalogMux() {
+void __not_in_flash_func(read_AnalogMux)() {
 
   for (uint8_t i = 0; i < 16; i++) {
 
@@ -122,7 +123,7 @@ muxAnalogData[i] = simpleKalmanFilter[i+16].updateEstimate(simpleKalmanFilter[i]
 }
 
 // Scan 16 mux channels into valorMUX1[48]; optionally sample analog on each channel.
-void read_digitalMux(bool readPots) {
+void __not_in_flash_func(read_digitalMux)(bool readPots) {
 
   for (activeDigitalMuxChannel = 0; activeDigitalMuxChannel < 16; activeDigitalMuxChannel++) {
 

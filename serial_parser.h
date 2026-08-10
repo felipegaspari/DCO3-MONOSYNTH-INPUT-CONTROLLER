@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include "sram_hot.h"
 #include "serial_frame.h"
 
 // -----------------------------------------------------------------------------
@@ -52,7 +53,7 @@ struct SerialParserContext {
   uint32_t          last_byte_time_us;
 };
 
-static inline void serial_parser_reset(SerialParserContext& ctx) {
+static inline INPUT_ALWAYS_INLINE void serial_parser_reset(SerialParserContext& ctx) {
   ctx.state             = SERIAL_WAIT_FOR_CMD;
   ctx.command           = 0;
   ctx.expected_len      = 0;
@@ -61,7 +62,7 @@ static inline void serial_parser_reset(SerialParserContext& ctx) {
   ctx.last_byte_time_us = 0;
 }
 
-static inline bool serial_parser_in_frame(const SerialParserContext& ctx) {
+static inline INPUT_ALWAYS_INLINE bool serial_parser_in_frame(const SerialParserContext& ctx) {
 #ifdef SERIAL_FRAMING_COBS
   return ctx.rx_len > 0;
 #else
@@ -69,7 +70,7 @@ static inline bool serial_parser_in_frame(const SerialParserContext& ctx) {
 #endif
 }
 
-static inline void serial_command_table_init(
+static inline INPUT_ALWAYS_INLINE void serial_command_table_init(
     SerialCommandTable& lut,
     const SerialCommandDef* commands,
     size_t numCommands)
@@ -84,7 +85,7 @@ static inline void serial_command_table_init(
   }
 }
 
-static inline void serial_parser_check_timeout(SerialParserContext& ctx,
+static inline INPUT_ALWAYS_INLINE void serial_parser_check_timeout(SerialParserContext& ctx,
                                                uint32_t now_us)
 {
   if (serial_parser_in_frame(ctx) && ctx.last_byte_time_us != 0) {
@@ -94,7 +95,7 @@ static inline void serial_parser_check_timeout(SerialParserContext& ctx,
   }
 }
 
-static inline void serial_parser_dispatch(
+static inline INPUT_ALWAYS_INLINE void serial_parser_dispatch(
     const SerialCommandTable& lut,
     uint8_t cmd,
     const uint8_t* payload,
@@ -107,7 +108,7 @@ static inline void serial_parser_dispatch(
 }
 
 #ifdef SERIAL_FRAMING_COBS
-static inline void serial_parser_process_byte_cobs(
+static inline INPUT_ALWAYS_INLINE void serial_parser_process_byte_cobs(
     SerialParserContext& ctx,
     const SerialCommandTable& lut,
     uint8_t b)
@@ -132,7 +133,7 @@ static inline void serial_parser_process_byte_cobs(
 #endif
 
 // Feed one on-wire byte.
-static inline void serial_parser_process_byte(
+static inline INPUT_ALWAYS_INLINE void serial_parser_process_byte(
     SerialParserContext& ctx,
     const SerialCommandTable& lut,
     uint8_t b)
@@ -165,7 +166,7 @@ static inline void serial_parser_process_byte(
 // Drain up to byte_budget bytes. One available() snapshot, then read n.
 // Timeout only when mid-frame and the stream is idle (no micros() per byte).
 template<typename StreamT>
-static inline void serial_parser_drain(
+static inline INPUT_ALWAYS_INLINE void serial_parser_drain(
     SerialParserContext& ctx,
     const SerialCommandTable& lut,
     StreamT& stream,
