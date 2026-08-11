@@ -3,8 +3,9 @@
 #include "sram_hot.h"
 //#include <Adafruit_TinyUSB.h>
 
-// Selects DCO3-MONOSYNTH vs DCO4-REBORN and derives voice count, UART wiring and
-// panel layout from it. This is the only per-instrument file in the sketch.
+// Derives voice count, UART wiring and panel layout from the instrument this
+// checkout belongs to, which comes from the superproject's project_config.h.
+// Nothing in this sketch differs between DCO3-MONOSYNTH and DCO4-REBORN.
 #include "board_model.h"
 
 int8_t OSC1Interval = 24;
@@ -79,6 +80,11 @@ void setup1() {
   SCREEN_PORT.setPollingMode(false);
   SCREEN_PORT.setFIFOSize(512);
   SCREEN_PORT.begin(2500000);
+  // Let the Screen learn which synth it's attached to (3 vs 8 oscillators)
+  // without a per-project build flag; screen_target.h derives its whole
+  // calibration UI from this one value. Silent: 157 is outside the 150..155
+  // range that raises the Screen's redraw flag.
+  serialSendParamByteToScreen(ParamId::PARAM_UI_VOICE_TOPOLOGY, (uint8_t)NUM_OSCILLATORS);
 #endif
 
   init_LED_control();

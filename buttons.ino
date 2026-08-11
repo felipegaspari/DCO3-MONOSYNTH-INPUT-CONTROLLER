@@ -525,7 +525,10 @@ void __not_in_flash_func(read_encoder_buttons)() {
         serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_OFFSET,
                                       (uint8_t)manualCalibrationInitAmpCompOffset[INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage)],
                                       /*sendToAll=*/false);
-        // And initialize the screen UI via 'y'.
+        // And initialize the screen UI via 'y'. Re-announce topology here too
+        // (belt-and-suspenders for a Screen that missed the boot announcement,
+        // e.g. hot-plugged or reset later) before the cal UI draws.
+        serialSendParamByteToScreen(ParamId::PARAM_UI_VOICE_TOPOLOGY, (uint8_t)NUM_OSCILLATORS);
         serialSendParamByteToScreen(ParamId::PARAM_MANUAL_CALIBRATION_STAGE,
                                     (uint8_t)manualCalibrationStage);
         serialSendParamByteToScreen(ParamId::PARAM_MANUAL_CALIBRATION_OFFSET,

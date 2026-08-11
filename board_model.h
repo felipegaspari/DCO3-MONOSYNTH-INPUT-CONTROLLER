@@ -9,8 +9,9 @@
 //
 // The same panel firmware runs the front panel of both synths. Everything that
 // differs between them is derived here, so every other file in this sketch is
-// byte-identical in the DCO3-MONOSYNTH and DCO4-REBORN trees and the two copies
-// can be diffed (or shared outright) with no merge work.
+// byte-identical in the DCO3-MONOSYNTH and DCO4-REBORN trees — and so is this
+// one. The instrument itself is not chosen here: it comes from the superproject
+// this checkout sits in, through project_config.h.
 //
 //   DCO3-MONOSYNTH  1 voice, 3 oscillators + sub. Input is wired straight to the
 //                   DCO, so preset/calibration frames make a single hop.
@@ -24,13 +25,21 @@
 #define INPUT_BOARD_DCO3 3
 #define INPUT_BOARD_DCO4 4
 
-// >>> The only line that differs between the DCO3-MONOSYNTH and DCO4-REBORN
-// >>> copies of this sketch. Everything else in the folder is byte-identical.
-// (The guard lets a build override it, e.g. --build-property
-// compiler.cpp.extra_flags=-DINPUT_BOARD_MODEL=4, to compile-check both models
-// from one tree.)
+// project_config.h is a symlink to the superproject root, so it is the same
+// committed file in both trees and resolves to a different instrument in each.
+#if __has_include("project_config.h")
+#include "project_config.h"
+#endif
+
+// A -D on the build line still wins, to compile-check the other instrument from
+// this tree. Missing config is an error rather than a default: a silent fallback
+// here is what flashes monosynth firmware onto a 4-voice panel.
 #ifndef INPUT_BOARD_MODEL
-#define INPUT_BOARD_MODEL INPUT_BOARD_DCO3
+#  ifdef PROJECT_INSTRUMENT
+#    define INPUT_BOARD_MODEL PROJECT_INSTRUMENT
+#  else
+#    error "no project_config.h - this sketch must sit in a DCO superproject root (see README), or pass -DINPUT_BOARD_MODEL"
+#  endif
 #endif
 
 #if INPUT_BOARD_MODEL != INPUT_BOARD_DCO3 && INPUT_BOARD_MODEL != INPUT_BOARD_DCO4

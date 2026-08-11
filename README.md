@@ -10,16 +10,13 @@ All detailed documentation lives under **[`docs/`](docs/)**. This README is the 
 
 ## One sketch, two instruments
 
-This exact source tree is the panel firmware for **both** synths. The
-DCO3-MONOSYNTH and DCO4-REBORN copies are byte-identical except for a single
-line in [`board_model.h`](board_model.h):
-
-```c
-#define INPUT_BOARD_MODEL INPUT_BOARD_DCO3   // or INPUT_BOARD_DCO4
-```
-
-Everything that differs between the two instruments is derived from that one
-symbol, so there is never a merge to do when a panel change lands:
+This is one repository, checked out into both synths, and the two working trees
+are **byte-identical** — there is no model line to keep straight and nothing to
+set before building. The instrument comes from the superproject:
+[`project_config.h`](project_config.h) here is a symlink to `../project_config.h`,
+so the same committed symlink resolves to `PROJECT_INSTRUMENT 3` in
+DCO3-MONOSYNTH and `4` in DCO4-REBORN. [`board_model.h`](board_model.h) reads it
+and derives everything that differs:
 
 | | DCO3-MONOSYNTH | DCO4-REBORN |
 |---|---|---|
@@ -34,13 +31,16 @@ symbol, so there is never a merge to do when a panel change lands:
 | Wave keys 0..4 | OSC1 saw, OSC2 pulse, OSC1 tri, OSC1 pulse, OSC3 pulse | OSC A saw/pulse/tri, OSC B saw/pulse |
 | Default voice mode | 0 (mono) | 1 (poly) |
 
-The two boards are still separate git repositories
-(`DCO3-MONOSYNTH-INPUT-CONTROLLER` and `DCO4-REBORN-INPUT-CONTROLLER`). Because
-the trees are now identical, a change made in one should be copied verbatim to
-the other — only `board_model.h`'s model line stays put. Collapsing them into a
-single shared submodule is the natural next step.
+Both instruments build with the same command, from either tree:
 
-To compile-check the other model without editing anything:
+```bash
+arduino-cli compile --fqbn rp2040:rp2040:rpipico --libraries ./_build_libs .
+```
+
+Building outside a superproject, where `project_config.h` does not resolve, is a
+compile error rather than a silent monosynth default — that default is what used
+to flash 3-oscillator firmware onto a 4-voice panel. Pass the model explicitly to
+compile-check the other instrument from this tree:
 
 ```bash
 arduino-cli compile --fqbn rp2040:rp2040:rpipico --libraries ./_build_libs \
@@ -83,7 +83,7 @@ arduino-cli compile --fqbn rp2040:rp2040:rpipico --libraries ./_build_libs \
 
 | Subsystem | Files | Role |
 |-----------|-------|------|
-| Model config | `board_model.h` | Voice count, UART wiring, panel layout |
+| Model config | `project_config.h` (symlink), `board_model.h` | Which instrument, then voice count, UART wiring, panel layout |
 | Entry | `INPUT-CONTROLLER.ino` | Dual-core setup/loop |
 | Scan | `Controls.*`, `encoders.*`, `buttons.*` | Mux + actions |
 | LEDs | `LED_control.*` | 595 mux |
@@ -109,7 +109,7 @@ arduino-cli compile --fqbn rp2040:rp2040:rpipico --libraries ./_build_libs .
 
 | Flag | Default | Effect |
 |------|---------|--------|
-| `INPUT_BOARD_MODEL` | per project (`board_model.h`) | Selects DCO3 vs DCO4; derives everything below the line |
+| `INPUT_BOARD_MODEL` | `PROJECT_INSTRUMENT` from the superproject's `project_config.h` | Selects DCO3 vs DCO4; derives voice count, UARTs and panel layout. Set it on the build line only to cross-check the other instrument |
 | `ENABLE_SERIAL` | **off** (commented) | USB debug printing |
 | `ENABLE_DCO_LINK` | on | Voice-side UART (`DCO_PORT`) |
 | `ENABLE_SCREEN_LINK` | on | Screen UART (`SCREEN_PORT`) |

@@ -2,13 +2,20 @@
 
 Purpose of **every file**, and for each source function: **what it does**, **who calls it**, and **when**.
 
-One sketch serves both instruments. The `DCO3-MONOSYNTH/INPUT-CONTROLLER` and `DCO4-REBORN/INPUT-CONTROLLER` trees are byte-identical apart from the `INPUT_BOARD_MODEL` line in [`board_model.h`](#board_modelh), so every model difference described below is derived from that one header.
+One sketch serves both instruments. The `DCO3-MONOSYNTH/INPUT-CONTROLLER` and `DCO4-REBORN/INPUT-CONTROLLER` trees are byte-identical, including [`board_model.h`](#board_modelh): the instrument comes from the superproject through the [`project_config.h`](#project_configh) symlink, and every model difference described below is derived from it.
 
 - Deep narrative: [`REFERENCE_AI.md`](REFERENCE_AI.md)
 - Panel / pin map: [`PANEL_AND_PINS.md`](PANEL_AND_PINS.md)
 - Preset browse/save/load (DCO owns storage): [`PRESETS.md`](PRESETS.md)
 - Control scan → serial path: [`CONTROL_PIPELINE.md`](CONTROL_PIPELINE.md)
 - Serial / ParamId how-to: [`README_serial_and_params.md`](README_serial_and_params.md)
+
+> `params_def.h`, `param_router.h`, `serial_input_protocol.h`,
+> `serial_param_protocol.h`, `serial_frame.h` and `serial_parser.h` are no longer
+> files in this folder. They come from the shared
+> [`DCO-PROTOCOL`](../../DCO-PROTOCOL/README.md) library, symlinked in as
+> `_build_libs/DCO-PROTOCOL`. Their entries below still describe the code this
+> board compiles; edit them in the library, once, for every board.
 - Three-board topology: [`SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md) (stub → DCO4_DCO canonical)
 - Repo entry / doc index: [`../README.md`](../README.md)
 
@@ -107,16 +114,20 @@ Main sketch (renamed from `DCO4_Input_Controller.ino` so the sketch name matches
 
 **Key macros / flags:** `NUM_VOICES` and `NUM_OSCILLATORS` come from `board_model.h` (DCO3: 1 and 3; DCO4: 4 and 8); Serial enables live in `Serial.h`.
 
+### `project_config.h`
+
+Not a file of this sketch: a symlink to `../project_config.h`, the superproject's own header. The symlink is committed here and is identical in both trees, but it resolves to `PROJECT_INSTRUMENT 3` in DCO3-MONOSYNTH and `4` in DCO4-REBORN — which is how one shared checkout builds two instruments with nothing set at build time. The Screen sketch reads the same file the same way.
+
 ### `board_model.h`
 
-The **only** per-instrument file in the sketch, and the header every model difference flows out of. `INPUT_BOARD_MODEL` is the single line that differs between the two project trees; a build may override it (`-DINPUT_BOARD_MODEL=4`) to compile-check the other model from one tree, and an `#error` rejects any other value. **No function definitions** apart from one inline helper.
+The header every model difference flows out of. It takes `INPUT_BOARD_MODEL` from `PROJECT_INSTRUMENT`, so the file itself is identical in both trees. A build may override it (`-DINPUT_BOARD_MODEL=4`) to compile-check the other model from one tree, an `#error` rejects any other value, and a second `#error` fires when no `project_config.h` resolves at all rather than quietly defaulting to the monosynth. **No function definitions** apart from one inline helper.
 
 **Exports**
 
 | Symbol | DCO3 | DCO4 | Read by |
 |--------|------|------|---------|
 | `INPUT_BOARD_DCO3` / `INPUT_BOARD_DCO4` | 3 / 4 | 3 / 4 | the `INPUT_BOARD_MODEL` comparisons in this header |
-| `INPUT_BOARD_MODEL` | `INPUT_BOARD_DCO3` | `INPUT_BOARD_DCO4` | this header only — the one line that differs between trees |
+| `INPUT_BOARD_MODEL` | 3 | 4 | this header only — taken from `PROJECT_INSTRUMENT` in the superproject's `project_config.h` |
 | `INPUT_IS_DCO3` / `INPUT_IS_DCO4` | 1 / 0 | 0 / 1 | every other `#if` in this header |
 | `NUM_VOICES` | 1 | 4 | `params.h` (`note*`, `velocity`, `ADSR*Level` arrays) |
 | `NUM_OSCILLATORS` | 3 | 8 | `params.h` (`manualCalibrationInitAmpCompOffset[]`), `Serial.ino` (cal-offset bounds check), `INPUT_CAL_STAGE_MAX` |
@@ -501,7 +512,7 @@ All detailed docs live under `docs/` (this file included). Root `README.md` is t
 | Goal | Start here |
 |------|------------|
 | Boot / dual-core split | `INPUT-CONTROLLER.ino` (`setup` / `setup1` / `loop` / `loop1`) |
-| Which model this build targets | `board_model.h` `INPUT_BOARD_MODEL` — the only line that differs between the two trees |
+| Which model this build targets | `PROJECT_INSTRUMENT` in the superproject's `project_config.h`, read by `board_model.h` as `INPUT_BOARD_MODEL` |
 | UART peers, baud, pins | `board_model.h` `INPUT_DCO_*` / `INPUT_SCREEN_*`, then `setup1()` + `Serial.h` `ENABLE_*` |
 | Wave key → oscillator, LEDs 0..4 | `board_model.h` `inputWaveKeys[]` (read by `toggle_wave_key` and `set_LED_Status(16, …)`) |
 | Manual calibration staging | `board_model.h` `INPUT_CAL_STAGES_PER_OSC` / `INPUT_CAL_STAGE_MAX` / `INPUT_CAL_STAGE_TO_OSC` |
