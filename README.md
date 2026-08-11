@@ -99,7 +99,7 @@ Details: [`docs/CONTROL_PIPELINE.md`](docs/CONTROL_PIPELINE.md).
 
 - **Toolchain:** Arduino IDE / CLI with Earle Philhower RP2040 core (or compatible).
 - **Sketch:** `INPUT-CONTROLLER.ino` (matches the folder name in both projects).
-- **Libraries:** `SimpleKalmanFilter`. `RoxMux_fela` is `_build_libs/RoxMux_fela` → `../../RoxMux_FELA`. `MD_REncoder_fela` is `_build_libs/MD_REncoder_fela` → `../../MD_REncoder_FELA`. `CD74HC4067` is `_build_libs/CD74HC4067` → `../../CD74HC4067_FELA` (not sketchbook). LittleFS is **no longer** a dependency.
+- **Libraries:** `SimpleKalmanFilter`. `DCO-PROTOCOL` is `_build_libs/DCO-PROTOCOL` → `../../DCO-PROTOCOL`; sketch-root shims (`params_def.h`, etc.) forward into it so Arduino IDE finds the headers without `--libraries`. `RoxMux_fela` is `_build_libs/RoxMux_fela` → `../../RoxMux_FELA`. `MD_REncoder_fela` is `_build_libs/MD_REncoder_fela` → `../../MD_REncoder_FELA`. `CD74HC4067` is `_build_libs/CD74HC4067` → `../../CD74HC4067_FELA` (not sketchbook). LittleFS is **no longer** a dependency.
 
 ```bash
 arduino-cli compile --fqbn rp2040:rp2040:rpipico --libraries ./_build_libs .
