@@ -1,8 +1,34 @@
-# Input Controller — preset load / save
+# Input Controller — preset browse / save / load
 
-Preset ownership for DCO4 lives on the **Input Controller**. The DCO and Screen never persist patches; they only receive values when Input loads or when the panel edits live.
+Preset **storage** ownership moved to the **DCO board**: the DCO's LittleFS
+256-slot store (`pb00`..`pb63`, 4 records each) is the single source of truth system-wide.
+Input has no LittleFS of its own and never persists a patch — it only keeps a
+RAM-only cache of the 256 slot **names** (for the encoder scroll UI) and asks
+the DCO to save/load/report slots over the panel link. The Screen never
+persists patches either; it only renders what Input tells it to.
 
-Source of truth for packing: [`presetStorage.ino`](../presetStorage.ino) (`loadPreset` / `writePreset`). Constants: [`FS.h`](../FS.h).
+This is true of **both instruments**, and this file describes both. The only
+difference is how many hops the frames make:
+
+| Model | Path from Input to the preset store |
+|-------|-------------------------------------|
+| DCO3-MONOSYNTH | Input `DCO_PORT` straight to the DCO |
+| DCO4-REBORN | Input `DCO_PORT` to the STM32 Mainboard, which relays `'q'`, `'N'` and ParamIds 170/171 on to the DCO, and relays the DCO's `'O'` and `'L'` answers back |
+
+On DCO4 the relay is explicit, per command byte, in
+[`MAINBOARD-CONTROLLER/Serial.ino`](../../MAINBOARD-CONTROLLER/Serial.ino); the
+Mainboard has no generic pass-through, so a new preset command byte has to be
+registered there as well as on the two endpoints. Nothing in `presetStorage.ino`
+is aware of the difference.
+
+DCO4 previously kept its own 256-slot LittleFS bank on this board
+(`presetBank1`, 180-byte slots, in the now-deleted `FS.h`). That is gone; the
+old bank is **not** migrated, so DCO4 starts from an empty DCO-side store.
+
+Source of truth for the wire protocol and record format: [`DCO/preset_store.h`](../../DCO/preset_store.h) /
+[`DCO/preset_store.ino`](../../DCO/preset_store.ino) — deep doc:
+[`DCO/docs/PRESET_STORE.md`](../../DCO/docs/PRESET_STORE.md).
+Source of truth on this board: [`presetStorage.ino`](../presetStorage.ino).
 
 ---
 
@@ -10,22 +36,15 @@ Source of truth for packing: [`presetStorage.ino`](../presetStorage.ino) (`loadP
 
 | Layer | Symbol | Size / role |
 |-------|--------|-------------|
-| LittleFS file | `"presetBank1"` | Persistent bank on flash |
-| RAM bank | `presetBank1Buffer[]` | Full bank in RAM (`NUM_PRESETS × flashPresetSize`) |
-| Working slot | `flashData[]` | One 180-byte slot while packing/unpacking |
-| Synth locals | `params.h`, `Controls.h`, sketch globals | Live edit state; what save reads |
+| DCO LittleFS | `pb00`..`pb63` (on the **DCO**, not Input) | 598-byte records × 4 per chunk; store of record |
+| Input RAM cache | `presetDir[256][16]` | Names only, fetched from the DCO; no patch data |
+| Name being edited | `presetNameVal[]` (`Controls.h`) | 16 ASCII chars, edited via `ACTION_select_char`/`_pos` |
+| Loaded / current name | `presetName[]` (`params.h`) | 16 ASCII chars, mirrors the DCO's current slot name |
 
-| Constant | Value |
-|----------|-------|
-| `NUM_PRESETS` | 256 |
-| `flashPresetSize` | **180** |
-| `LEGACY_FLASH_PRESET_SIZE` | 140 (format version 0) |
-| `PRESET_FORMAT_V1` | 1 (v1 tail `140..179`) |
-| `PRESET_FORMAT_V2` | 2 (LFO extras `112..118`, pitch mode + Character `135..136`) |
-| `PRESET_FORMAT_VERSION` | **2** (written to `flashData[2]` on save) |
-| Bank size | 256 × 180 = 46080 bytes |
-
-16-bit fields use Arduino `highByte` / `lowByte` on write and `word(hi, lo)` on read.
+Input's addressable range is **0..255** (matches the DCO's 256 slots). There is
+no local 180-byte slot format, no `flashPresetSize`/`flashBankSize`, and no
+migration code on this board anymore — all of that lived in the now-deleted
+`FS.h` and the pre-rewrite `presetStorage.ino`.
 
 ---
 
@@ -33,70 +52,90 @@ Source of truth for packing: [`presetStorage.ino`](../presetStorage.ino) (`loadP
 
 ```mermaid
 flowchart LR
-  LFS["LittleFS presetBank1"]
-  RAM["presetBank1Buffer"]
-  Slot["flashData 180B"]
-  Locals["Input locals"]
-  DCO["DCO Serial1"]
-  Scr["Screen Serial2"]
+  Dir["presetDir[256] RAM cache (Input)"]
+  Locals["Input locals (presetName / presetNameVal)"]
+  DCO["DCO preset_store.ino (LittleFS pb00..pb63)"]
+  Scr["Screen"]
 
-  LFS <-->|"initFS read/write slot"| RAM
-  RAM <-->|"loadPreset / writePreset"| Slot
-  Slot <-->|"unpack / pack"| Locals
-  Locals -->|"ParamId p/w + a-f blocks"| DCO
-  Locals -->|"q scroll + signals"| Scr
+  Input["Input Controller"] -->|"'N' directory request"| DCO
+  DCO -->|"256x 'O' [slot][name:16]"| Dir
+  Dir --> Locals
+  Locals -->|"'q' 16-char name + 'p' PARAM_PRESET_SAVE"| DCO
+  Locals -->|"'p' PARAM_PRESET_LOAD"| DCO
+  DCO -->|"'L' [slot] loaded"| Locals
+  DCO -->|"'p' persistable mirror + 'a'-'d' blocks"| Locals
+  Locals -->|"'q' scroll + signals"| Scr
 ```
 
-Related framing for continuous blocks `'a'`–`'d'` + `'p'` 210/222: [`CONTROL_PIPELINE.md`](CONTROL_PIPELINE.md). Mod-slot semantics: [DCO `MOD_MATRIX.md`](../../DCO/docs/MOD_MATRIX.md).
+Related framing for continuous blocks `'a'`–`'d'` + `'p'` 210/222:
+[`CONTROL_PIPELINE.md`](CONTROL_PIPELINE.md). Mod-slot semantics:
+[DCO `MOD_MATRIX.md`](../../DCO/docs/MOD_MATRIX.md).
 
 ---
 
-## Boot: `initFS()`
+## Boot: `request_preset_directory()`
 
-Called from `setup1()` on Core 1.
+Called from `setup1()` on Core 1 (after `DCO_PORT`/`init_dco_link_parser()` are
+up), replacing the old `initFS()`. Sends the 1-byte `'N'` frame; the DCO
+answers with 256 `'O'` frames that fill `presetDir[]`. Boot-time preset
+**recall** is no longer Input's job — the DCO does its own
+`preset_store_boot_recall()` independently and announces the result with `'L'`.
 
-1. `LittleFS.begin()`.
-2. **Missing file** — zero RAM bank, write a full 256×180 file.
-3. **Legacy file** (`size == 256×140`) — read into the start of `presetBank1Buffer`, expand **backwards** (slot 255 → 0): copy 140 bytes, zero-pad to 180, then rewrite the whole file. Bytes `0..139` of each patch are preserved; `140..179` are zero and treated as format version 0 on load.
-4. **Current-sized (or larger) file** — pad up to `flashBankSize` if short, then read the bank into RAM.
-5. Copy slot 0 into `flashData`, then **`loadPreset(1)`** (boot always recalls preset index 1, not 0).
+`'N'`'s payload is 1 unused/padding byte, not 0: the shared parser
+(`serial_parser_dispatch()`) treats `payload_len == 0` as "unregistered
+command" in both RAW and COBS framing, so a true zero-length frame could never
+dispatch.
 
 ---
 
 ## Panel UI
 
-Flags in [`Controls.h`](../Controls.h): `presetSaveSelectMode`, `presetSaveMode`, `presetSelectVal`, `currentPreset`, `presetName[]` (loaded name), `presetNameVal[]` (name being edited).
+Flags in [`Controls.h`](../Controls.h): `presetSaveSelectMode`, `presetSaveMode`,
+`presetSelectVal` (0..255), `currentPreset`, `presetNameVal[]` (name being
+edited). `presetName[]` (loaded name) lives in [`params.h`](../params.h).
 
 ### Browse / load
 
 Encoder action `ACTION_select_preset` ([`encoders.ino`](../encoders.ino)):
 
-- **Normal play** (`!presetSaveSelectMode`): each encoder step updates `presetSelectVal` and immediately calls **`loadPreset(presetSelectVal)`** (no separate confirm).
-- **Save-select**: encoder only scrolls; `get_preset_name` + Screen `'q'` (`serial_send_preset_scroll`); does **not** load until the user leaves save mode / loads later in play mode.
+- **Normal play** (`!presetSaveSelectMode`): each encoder step updates
+  `presetSelectVal` (clamped `0..255`) and immediately calls
+  **`preset_load_from_board(presetSelectVal)`** — sends `PARAM_PRESET_LOAD` to
+  the DCO, updates the Screen from the local name cache right away, and the
+  DCO's own `'L'` notice + persistable `'p'`/`'a'`-`'d'` mirror confirm/apply
+  everything else.
+- **Save-select**: encoder only scrolls; `get_preset_name()` reads
+  `presetDir[]` (no round trip) + Screen `'q'` (`serial_send_preset_scroll`);
+  does **not** load until the user leaves save mode / loads later in play mode.
 
 ### Save state machine
 
-Buttons [`PRESET_SAVE_SELECT_MODE`](../buttons.ino) and [`SAVE_PRESET`](../buttons.ino):
+Buttons [`PRESET_SAVE_SELECT_MODE`](../buttons.ino) and
+[`SAVE_PRESET`](../buttons.ino):
 
 ```mermaid
 stateDiagram-v2
   [*] --> Idle
   Idle --> Select: PRESET_SAVE_SELECT_MODE
-  note right of Select: signal 3
+  note right of Select: signal 3, request_preset_directory()
   Select --> Idle: PRESET_SAVE_SELECT_MODE cancel
   note right of Idle: signal 2
   Select --> NameEdit: SAVE_PRESET
   note right of NameEdit: signal 4
   NameEdit --> Idle: PRESET_SAVE_SELECT_MODE cancel
   NameEdit --> Idle: SAVE_PRESET commit
-  note right of Idle: writePreset + signal 5
+  note right of Idle: preset_save_to_board + signal 5
 ```
 
 | Mode | Flags | Encoder | Commit |
 |------|-------|---------|--------|
 | Idle | both false | load on scroll | — |
-| Select slot | `presetSaveSelectMode`, `!presetSaveMode` | scroll name only | `SAVE_PRESET` → name edit |
-| Name edit | both true | `ACTION_select_char` / `_pos` edits `presetNameVal` | `SAVE_PRESET` → `writePreset(presetSelectVal)` |
+| Select slot | `presetSaveSelectMode`, `!presetSaveMode` | scroll name only (cache) | `SAVE_PRESET` → name edit |
+| Name edit | both true | `ACTION_select_char` / `_pos` edits `presetNameVal` | `SAVE_PRESET` → `preset_save_to_board(presetSelectVal)` |
+
+Entering select mode also calls `request_preset_directory()` to refresh the
+cache, guarding against staleness if another peer (e.g. `dco_control`)
+renamed/saved a slot on the DCO since boot.
 
 Screen signals used by save UI:
 
@@ -106,148 +145,73 @@ Screen signals used by save UI:
 | 4 | Enter name edit |
 | 5 | Preset saved |
 | 2 | Save cancelled / exit |
-| 6 / 1 | Screen silence during / after `loadPreset` TX |
+| 6 / 1 | Screen silence during / after a preset-scroll TX |
 
 ---
 
-## `loadPreset(n)`
+## `preset_load_from_board(slot)`
 
-### Unpack
+Replaces the old `loadPreset(n)`. There is no local unpack step anymore — the
+DCO owns the record and applies it itself:
 
-1. Clear **session** manual flags: fader rows, VCF/VCA/PWM pot manual. Do **not** force `ADSR3Enabled` off before unpack.
-2. Copy `presetBank1Buffer[n*180 ..]` → `flashData`.
-3. Unpack classic region `0..134` into locals (waves, voice, levels, ADSRs, name, …).
-4. Call `reset_v1_patch_defaults()` (empty mod matrix `0xFF`/`0xFF`/0, dist 0, soft sync / sub-osc / filter / porta mode 0).
-5. If `flashData[2] >= PRESET_FORMAT_V1` (1), unpack v1 tail `140..179` over those defaults. Do **not** gate on `PRESET_FORMAT_VERSION` or v1 banks lose the v1 tail after a version bump.
-6. Call `reset_v2_patch_defaults()` (LFO1→OSC1/2/3, LFO2 coarse, EnvDCO pitch mode, Character = 0).
-7. If `flashData[2] >= PRESET_FORMAT_V2` (2), unpack v2 fields `112..118` and `135..136` over those defaults.
-8. Version **0** (including freshly migrated pads): keep the defaults — do **not** treat zero-filled `140..179` as “mod slot 0 = source 0”. Old v1 slots keep v2 fields at 0.
+1. Clear **session** manual flags: fader rows, VCF/VCA/PWM pot manual.
+2. Send `PARAM_PRESET_LOAD` (171) = slot to the DCO (`serial_send_param_change_byte`, DCO-only).
+3. Update `currentPreset` / `presetSelectVal` / `presetName[]` from the local
+   `presetDir[slot]` cache (optimistic — no round trip needed for the Screen).
+4. `serial_send_preset_scroll()` + `serial_send_signal(1)` (same Screen update
+   the old `loadPreset()` sent at the end).
 
-### Re-TX to DCO / Screen
+The DCO then applies the record (`preset_record_apply()`) and mirrors every
+captured persistable `'p'` id plus all four `'a'`–`'d'` blocks back over the
+existing panel link — Input's existing `input_handle_param16_from_dco()` /
+persistable-mirror handling picks those up with **zero changes**, exactly as it
+already did for USB/MIDI-triggered loads. The DCO also fires `'L'` `[slot]`
+once the load completes, so a load triggered by boot recall / MIDI Program
+Change / USB `dco_control` also updates Input's Screen display, not just
+Input-triggered loads.
 
-Order (abridged; see code for full list):
-
-1. `serial_send_signal(6)` — screen silence.
-2. Force `PARAM_PWM_POTS_CONTROL_MANUAL = 0` (session).
-3. TX `PARAM_ADSR3_ENABLED` from unpacked value.
-4. Wave enables (OSC1–3 Saw/Pulse/Tri), LED refresh.
-5. Restarts, ADSR3→osc, LFO waveforms, intervals, sync, porta time/mode, voice mode, velocity, levels (`sendToAll=true`), unison/drift, hard sync / soft sync / sub-osc, filter mode, dist drive/mix, **all 8 mod slots**.
-6. LFO depths, VCA level, keytrack, ADSR3→PWM (**value + 512** on the wire), detunes, then v2 `'p'` **216–221** and **223** (LFO1→OSC1/2/3, LFO2 coarse, Character, EnvDCO pitch mode).
-7. `serial_send_manual_controls(true)` — ADSR1/2/3, filter block; ADSR1→VCA / PW as `'p'` 222 / 210. Also explicit `'p'` 210/222 before the manual burst.
-8. ADSR curve ParamIds.
-9. `serial_send_preset_scroll` + `serial_send_signal(1)`.
-
-Delays between groups pace the serial flood so DCO/Screen keep up.
-
----
-
-## `writePreset(n)`
-
-1. Clear session manual flags only (`ADSR3Enabled` is **kept** and packed).
-2. Pack locals → `flashData` (classic + name from **`presetNameVal`**, not `presetName`).
-3. Set `flashData[2] = PRESET_FORMAT_VERSION` (2); pack v2 fields `112..118` + `135..136`; pack v1 tail; zero pad `137..139`.
-4. Copy `flashData` into `presetBank1Buffer` at `n * 180`.
-5. Open LittleFS `"presetBank1"` `r+`, `seek(n*180)`, write 180 bytes, close.
-6. Clear save UI flags; set `currentPreset` / `presetSelectVal`; copy first 12 name chars into `presetName`; refresh LEDs.
-
-`writePresetActions` / `loadPresetActions` exist for session cleanup but are **not** called from the live load/save path.
+Of the four block frames, only `'d'` (filter) is parsed by Input's
+`dcoLinkCommands[]` LUT, via `input_handle_filter_block_from_dco()`: it refreshes
+Input's `CUTOFF` / `RESONANCE` / `ADSR2toVCF` / `LFO2toVCF` locals so the pots
+resume from the recalled values, and passes the frame on to the Screen. The
+three ADSR blocks `'a'`–`'c'` are still ignored here; Input's ADSR locals come
+only from its own faders. Note that the Screen does not register `'d'` either,
+so the forwarded frame is dropped at that end until a handler is added there.
 
 ---
 
-## Slot layout (format version 2)
+## `preset_save_to_board(slot)`
 
-v1 tail **140–179** is unchanged. New saves write version **2**. Unpack uses `>= 1` / `>= 2` (not `>= PRESET_FORMAT_VERSION`).
+Replaces the old `writePreset(n)`. The DCO builds and writes the whole record
+(shadow-captured params + block globals) itself — Input only needs to tell it
+the name and the target slot:
 
-### Flag bytes
+1. Clear session manual flags (same as before).
+2. `serial_send_preset_name_to_mainboard()` — 16-byte `'q'` frame from `presetNameVal`.
+3. Send `PARAM_PRESET_SAVE` (170) = slot (DCO-only).
+4. Update `presetDir[slot]` from `presetNameVal` locally (no re-fetch needed).
+5. Update `currentPreset` / `presetSelectVal` / `presetName[]`; refresh LEDs.
 
-| Byte | Bit | Field |
-|------|-----|-------|
-| 0 | 0 | `waveEnable[0][0]` OSC1 Saw |
-| 0 | 1 | `waveEnable[0][1]` OSC1 Pulse |
-| 0 | 2 | `waveEnable[0][2]` OSC1 Tri |
-| 0 | 3 | unused (legacy sine) — always 0 |
-| 0 | 4–5 | unused (legacy SQR enables) — always 0 |
-| 0 | 6 | `RESONANCEAmpCompensation` |
-| 0 | 7 | `VCAADSRRestart` |
-| 1 | 0 | `VCFADSRRestart` |
-| 1 | 1 | unused (was PWM pots manual) — always 0 |
-| 1 | 2 | `ADSR3Enabled` |
-| 1 | 3–7 | unused |
-| 2 | — | **format version** (2 on new saves; 1 = v1 tail only) |
-| 3 | 0–2 | OSC2 Saw / Pulse / Tri |
-| 3 | 3–5 | OSC3 Saw / Pulse / Tri |
-| 3 | 6–7 | unused |
-| 4–5 | — | unused |
-
-### Classic scalars (6..134)
-
-| Bytes | Type | Local |
-|-------|------|-------|
-| 6, 7 | i8 | `LFO1Waveform`, `LFO2Waveform` |
-| 8–10 | i8 | `OSC1Interval`, `OSC2Interval`, `oscSyncMode` |
-| 11 | u8 | `portamentoTime` (stored as one byte) |
-| 12–15 | i8 | `voiceMode`, `ADSR3ToOscSelect`, `velocityToVCF`, `velocityToVCA` |
-| 16 | u8 | `unisonDetune` |
-| 17–20 | i8 | ADSR1/2 attack/decay curve vals |
-| 21–23 | u8 | `analogDrift`, `analogDriftSpeed`, `analogDriftSpread` |
-| 24–25 | u8 | `syncMode`, `OSC3Interval` |
-| 26–29 | — | unused |
-| 30–31 | i16 | `VCFKeytrack` |
-| 32–39 | i16 | `OSC1Level`, `OSC2Level`, `SubLevel`, `OSC3Level` |
-| 40–49 | i16 | `LFO1toDCO`, `LFO1Speed`, `LFO2Speed`, `ADSR3toPWM`, `ADSR3toDETUNE1` |
-| 50–51 | — | reserved |
-| 52–55 | i16 | `OSC3Detune`, `LFO2toOSC3DETUNE` |
-| 56–61 | — | unused |
-| 62–71 | i16 | `OSC2Detune`, `LFO2toOSC2DETUNE`, `VCALevel`, `LFO1toVCA`, `LFO2toPWM` |
-| 72–73 | — | unused |
-| 74–85 | u16 | `CUTOFF`, `RESONANCE`, `ADSR2toVCF`, `LFO2toVCF`, `ADSR1toVCA`, `PW` |
-| 86–87 | — | unused |
-| 88–111 | u16 | ADSR1 / ADSR2 / ADSR3 A/D/S/R |
-| 112–118 | — | format v2 (see below); unused / zero on v0–v1 |
-| 119–134 | char×16 | Preset name (`writePreset` uses `presetNameVal`) |
-
-### Format v1 tail (140..179)
-
-| Bytes | Field | ParamId |
-|-------|-------|---------|
-| 140 | `filterMode` | `PARAM_FILTER_MODE` (54) |
-| 141 | `softSync` | `PARAM_SOFT_SYNC` (36) |
-| 142 | `subOscDivide` | `PARAM_SUBOSC_DIVIDE` (37) |
-| 143 | `portamentoMode` | `PARAM_PORTAMENTO_MODE` (32) |
-| 144–145 | `distDrive` | `PARAM_DIST_DRIVE` (52) |
-| 146–147 | `distMix` | `PARAM_DIST_MIX` (53) |
-| 148–179 | Mod matrix slots 0..7 | `PARAM_MOD_SLOT0_*` … `PARAM_MOD_SLOT7_*` (60–83) |
-
-Each mod slot is **4 bytes**: `source`, `dest`, `depth` high, `depth` low. Empty = `0xFF` / `0xFF` / `0` (matches DCO `MOD_SRC_EMPTY` / `MOD_DEST_EMPTY`).
-
-### Format v2 extras (112..118 and 135..136)
-
-| Bytes | Field | ParamId | Type |
-|-------|-------|---------|------|
-| 112 | `LFO1toOSC1` | `PARAM_LFO1_TO_OSC1` (216) | u8 0..255 |
-| 113 | `LFO1toOSC2` | `PARAM_LFO1_TO_OSC2` (217) | u8 |
-| 114 | `LFO1toOSC3` | `PARAM_LFO1_TO_OSC3` (218) | u8 |
-| 115–116 | `LFO2toOSC2_coarse` | `PARAM_LFO2_TO_OSC2_COARSE` (219) | u16 0..511 |
-| 117–118 | `LFO2toOSC3_coarse` | `PARAM_LFO2_TO_OSC3_COARSE` (220) | u16 |
-| 135 | `env_dco_pitch_centered` | `PARAM_ADSR3_PITCH_MODE` (223) | u8 0/1 |
-| 136 | `characterAmount` | `PARAM_CHARACTER` (221) | u8 0..128 |
-| 137–139 | pad | — | 0 |
-
-v2 missing (old v1 / zero pad) → defaults 0 via `reset_v2_patch_defaults()`.
+`writePresetActions` / `loadPresetActions` still exist for session cleanup but
+are **not** called from the live load/save path (same as before the rewrite).
 
 ---
 
-## What is not in a preset
+## What is not cached on Input
 
-- Session UI: fader-row manual, VCF/VCA/PWM pot manual (PWM manual always TX’d 0 on load).
-- Calibration / debug / menu ParamIds (e.g. 101, 120–129, 150+).
-- Panel encoders for 216–221 / 223 — Input has locals and load TX, but no panel editors yet. USB `dco_control` / MIDI persistable `'p'` IDs are mirrored DCO→Input into the same RAM (ADSR3→PWM wire − 512), so a later panel save stores them. `'a'`–`'d'` ADSR/filter blocks are **not** mirrored (exp vs linear). Save still reads Input locals only.
+Only the **name** of each of the 256 slots lives in Input's RAM
+(`presetDir[256][16]`). Every other patch parameter, the four `'a'`–`'d'`
+blocks, and the calibration tables live exclusively in the DCO's LittleFS —
+see [`DCO/docs/PRESET_STORE.md`](../../DCO/docs/PRESET_STORE.md) for the
+598-byte record layout and everything that is/isn't captured in a preset.
 
 ---
 
 ## Extending the format
 
-1. Prefer unused bytes inside 180, or bump `flashPresetSize` and add a migration like the 140→180 path.
-2. Bump `PRESET_FORMAT_VERSION` and gate new unpack behind `flashData[2] >= N`.
-3. Update **both** `loadPreset` and `writePreset`, plus this doc and Input locals / load TX.
-4. Keep ParamId numbers stable across MCU `params_def.h` mirrors.
+The 598-byte record format is owned entirely by the DCO now
+(`DCO/preset_store.h`) — extend it there, not here. On this board, only touch
+`presetStorage.ino` if the **directory/notification protocol** itself
+(`'N'`/`'O'`/`'L'`, or the 16-byte `'q'` name width) needs to change; keep
+`INPUT_SERIAL_LEN_PRESET_NAME` / `INPUT_SERIAL_LEN_PRESET_DIR_ENTRY` in sync
+with `DCO/serial_input_protocol.h` if so.

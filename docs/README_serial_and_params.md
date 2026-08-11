@@ -4,9 +4,9 @@ Shared **inner** serial + ParamId infrastructure. This board is the UART hub: DC
 
 ### Input Controller notes (this repo)
 
-- **DCO** (`DCO_PORT` = `Serial1`, TX GP0 / RX GP1): slim LE `'a'`–`'d'`, `'p'` `[id][i16 LE]`, `'q'` 8 chars. Former `'e'`/`'f'` are `'p'` **222** / **210**. Byte UI params go to DCO as `'p'` (u8 zero-extended).
+- **DCO** (`DCO_PORT` = `Serial1`, TX GP0 / RX GP1): slim LE `'a'`–`'d'`, `'p'` `[id][i16 LE]`, `'q'` 16 chars. Former `'e'`/`'f'` are `'p'` **222** / **210**. Byte UI params go to DCO as `'p'` (u8 zero-extended). Preset directory sync (DCO is the only preset store — [`PRESETS.md`](PRESETS.md)): Input sends `'N'` (1 unused byte), DCO answers with 256× `'O'` (`[slot][name:16]`) and `'L'` (`[slot]`) after every load.
 - **Screen** (`SCREEN_PORT` = `Serial2`, TX GP4): slim `'a'`/`'b'` linear faders LE, `'p'` when `sendToAll`, Screen-only `'w'`/`'y'`/`'s'`/`'c'`, `'q'` = preset# + 16 chars.
-- Inbound: `serial_read_from_dco()` LUT-drains slim `'x'` (5 B) and persistable `'p'` (3 B). Gap 154 is relayed as slim `'x'`; cal 155 stored locally; `'p'` writes LittleFS locals and forwards to Screen toasts (no re-TX to DCO). See [`CONTROL_PIPELINE.md`](CONTROL_PIPELINE.md).
+- Inbound: `serial_read_from_dco()` LUT-drains slim `'x'` (5 B), persistable `'p'` (3 B), and preset directory `'O'`/`'L'`. Gap 154 is relayed as slim `'x'`; cal 155 stored locally; `'p'` writes in-RAM synth locals (no LittleFS on this board) and forwards to Screen toasts (no re-TX to DCO). See [`CONTROL_PIPELINE.md`](CONTROL_PIPELINE.md).
 - UARTs: IRQ (`setPollingMode(false)`), FIFO 512, 2.5 Mbaud. Manual blocks @ 1 ms; encoder `'p'`/`'w'` immediate on Core0.
 - Framing: default RAW. `#define SERIAL_FRAMING_COBS` in `Serial.h` must match DCO/Screen. `SERIAL_INNER_MAX_PAYLOAD` is **17** here (Screen `'q'`). Timeout 500 µs.
 - `params.ino` apply-router is **commented out**; this MCU is primarily a sender.
@@ -20,7 +20,7 @@ Shared **inner** serial + ParamId infrastructure. This board is the UART hub: DC
 |--------|------|
 | `params_def.h` | Canonical `enum ParamId` (includes 210 / 222) |
 | `param_router.h` | Table-driven apply (unused live on this board) |
-| `serial_input_protocol.h` | DCO inner cmds + sizes (`'a'`–`'d'`, `'p'`, `'q'`, `'x'`) |
+| `serial_input_protocol.h` | DCO inner cmds + sizes (`'a'`–`'d'`, `'p'`, `'q'`, `'x'`, `'N'`, `'O'`, `'L'`) |
 | `serial_param_protocol.h` | LE encode/decode for `'p'` / `'w'` / `'x'` |
 | `serial_frame.h` | Buffer COBS + `serial_frame_write()`. Default RAW |
 | `serial_parser.h` | O(1) LUT, 500 µs idle timeout, drain budget 64 |
@@ -101,6 +101,10 @@ Handlers always see inner cmd + payload (LE, no finish). `'w'` is Screen-only 8-
 1. Add cmd + payload length to `serial_input_protocol.h` if it is a DCO-link command.
 2. Screen-only cmds stay in the Screen LUT / Input TX helpers (`'w'`/`'y'`/`'s'`/`'c'`, 17-byte `'q'`).
 3. Keep `0x00` unused. Prefer LE. Send via `serial_frame_write()`.
+4. **Payload length must be ≥ 1**, even for a command that carries no real information
+   (e.g. `'N'`). `serial_parser_dispatch()` / `serial_parser_process_byte()` treat
+   `payload_len == 0` as "unregistered command" (same sentinel used for commands not in
+   the LUT at all) — a true 0-byte command can never dispatch, in RAW or COBS framing.
 
 ---
 

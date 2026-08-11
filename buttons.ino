@@ -1,4 +1,15 @@
 #include "include_all.h"
+
+// Flip one of the five panel wave keys and mirror it to the DCO and its LED.
+// The key index is also the LED index (see board_model.h).
+static void toggle_wave_key(uint8_t key) {
+  const InputWaveKey& k = inputWaveKeys[key];
+  waveEnable[k.osc][k.wave] = !waveEnable[k.osc][k.wave];
+  serial_send_param_change_byte(input_wave_key_param_id(k.osc, k.wave),
+                                waveEnable[k.osc][k.wave]);
+  set_LED_Status(key, waveEnable[k.osc][k.wave]);
+}
+
 // Core0 ~99 µs: update RoxButtons from mux and dispatch ButtonAction handlers.
 void __not_in_flash_func(read_encoder_buttons)() {
 
@@ -218,36 +229,25 @@ void __not_in_flash_func(read_encoder_buttons)() {
     switch (currentButtonAction) {
       case BTN_ACTION_NONE:
         break;
+      // The five wave keys differ only in which oscillator they toggle, which
+      // is a per-panel fact held in board_model.h's INPUT_WAVE_KEY_TABLE.
       case TG_SAW1:
-        waveEnable[0][0] = !waveEnable[0][0];
-        serial_send_param_change(ParamId::PARAM_OSC1_SAW_ENABLE, waveEnable[0][0]);
-        set_LED_Status(0, waveEnable[0][0]);
-        break;
-      case TG_SAW2:
-        // Panel button: OSC1 Pulse (analog via DG411)
-        waveEnable[0][1] = !waveEnable[0][1];
-        serial_send_param_change_byte(ParamId::PARAM_OSC1_PULSE_ENABLE, waveEnable[0][1]);
-        set_LED_Status(3, waveEnable[0][1]);
-        break;
-      case TG_TRI:
-        waveEnable[0][2] = !waveEnable[0][2];
-        serial_send_param_change_byte(ParamId::PARAM_OSC1_TRI_ENABLE, waveEnable[0][2]);
-        set_LED_Status(2, waveEnable[0][2]);
-        break;
-      case TG_SIN:
-        // No panel sine; OSC2/3 enables via serial / dco_control for now.
+        toggle_wave_key(0);
         break;
       case TG_SQR1:
-        // Panel key remapped: OSC2 Pulse (analog via DG411)
-        waveEnable[1][1] = !waveEnable[1][1];
-        serial_send_param_change_byte(ParamId::PARAM_OSC2_PULSE_ENABLE, waveEnable[1][1]);
-        set_LED_Status(1, waveEnable[1][1]);
+        toggle_wave_key(1);
+        break;
+      case TG_TRI:
+        toggle_wave_key(2);
+        break;
+      case TG_SAW2:
+        toggle_wave_key(3);
         break;
       case TG_SQR2:
-        // Panel key remapped: OSC3 Pulse (analog via DG411)
-        waveEnable[2][1] = !waveEnable[2][1];
-        serial_send_param_change_byte(ParamId::PARAM_OSC3_PULSE_ENABLE, waveEnable[2][1]);
-        set_LED_Status(4, waveEnable[2][1]);
+        toggle_wave_key(4);
+        break;
+      case TG_SIN:
+        // No panel sine key on either instrument.
         break;
 
       case TG_RESO_AMP_COMP:
@@ -291,7 +291,6 @@ void __not_in_flash_func(read_encoder_buttons)() {
             LFO1Waveform = 1;
           }
         }
-        serial_send_LFO1toDCOWaveChangeFlag = true;
         serial_send_param_change_byte(ParamId::PARAM_LFO1_WAVEFORM, LFO1Waveform);
 
         break;
@@ -355,10 +354,13 @@ void __not_in_flash_func(read_encoder_buttons)() {
           serial_send_preset_scroll(currentPreset, presetName);
           presetSelectVal = currentPreset;
         } else {
-          // Idle -> enter preset-select mode.
+          // Idle -> enter preset-select mode. Refresh the directory cache
+          // first in case another peer (e.g. dco_control) renamed/saved a
+          // slot on the DCO since boot.
           presetSaveSelectMode = true;
           presetSaveMode       = false;
           charSelectVal        = 0;
+          request_preset_directory();
           serial_send_signal(3);  // ENTER SAVE SELECT MODE
         }
         break;
@@ -380,7 +382,7 @@ void __not_in_flash_func(read_encoder_buttons)() {
           presetSaveMode       = false;
           presetSaveSelectMode = false;
 
-          writePreset(presetSelectVal);
+          preset_save_to_board(presetSelectVal);
 
           // After saving, send updated preset name so the screen shows it.
           serial_send_preset_scroll((uint8_t)presetSelectVal, presetNameVal);
@@ -497,11 +499,10 @@ void __not_in_flash_func(read_encoder_buttons)() {
       case TG_ADSR3_TO_OSC_SELECT:
         if (buttonActionIsSelected) {
           ADSR3ToOscSelect++;
-          if (ADSR3ToOscSelect > 4) {
+          if (ADSR3ToOscSelect > INPUT_ADSR3_TO_OSC_SELECT_MAX) {
             ADSR3ToOscSelect = 0;
           }
         }
-        serialSendADSR3ToOscSelectFlag = true;
         serial_send_param_change_byte(ParamId::PARAM_ADSR3_TO_OSC_SELECT, ADSR3ToOscSelect);
         break;
 
@@ -522,13 +523,13 @@ void __not_in_flash_func(read_encoder_buttons)() {
                                       (uint8_t)manualCalibrationStage,
                                       /*sendToAll=*/false);
         serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_OFFSET,
-                                      (uint8_t)manualCalibrationInitAmpCompOffset[manualCalibrationStage / 2],
+                                      (uint8_t)manualCalibrationInitAmpCompOffset[INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage)],
                                       /*sendToAll=*/false);
         // And initialize the screen UI via 'y'.
         serialSendParamByteToScreen(ParamId::PARAM_MANUAL_CALIBRATION_STAGE,
                                     (uint8_t)manualCalibrationStage);
         serialSendParamByteToScreen(ParamId::PARAM_MANUAL_CALIBRATION_OFFSET,
-                                    (uint8_t)manualCalibrationInitAmpCompOffset[manualCalibrationStage / 2]);
+                                    (uint8_t)manualCalibrationInitAmpCompOffset[INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage)]);
         break;
 
       case BACK:

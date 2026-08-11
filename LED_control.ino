@@ -13,11 +13,11 @@ void __not_in_flash_func(set_LED_Status)(byte LEDNumber, byte LEDStatus) {
 
   if (LEDNumber == 16) {
 
-    LEDState[0] = waveEnable[0][0];  // OSC1 Saw
-    LEDState[1] = waveEnable[1][1];  // OSC2 Pulse (TG_SQR1 key)
-    LEDState[2] = waveEnable[0][2];  // OSC1 Tri
-    LEDState[3] = waveEnable[0][1];  // OSC1 Pulse
-    LEDState[4] = waveEnable[2][1];  // OSC3 Pulse (TG_SQR2 key)
+    // LEDs 0..4 sit behind the five wave keys; which oscillator each one shows
+    // is a per-panel fact (board_model.h).
+    for (uint8_t k = 0; k < INPUT_WAVE_KEY_COUNT; k++) {
+      LEDState[k] = waveEnable[inputWaveKeys[k].osc][inputWaveKeys[k].wave];
+    }
     LEDState[5] = 0;
     LEDState[6] = 0;
     LEDState[7] = VCFPotsControlManual;

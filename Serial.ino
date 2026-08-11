@@ -39,7 +39,7 @@ void __not_in_flash_func(serial_send_param_change_byte)(byte param, byte paramVa
 #endif
 }
 
-// Send preset name (8 chars) to the DCO via 'q'.
+// Send preset name (16 chars) to the DCO via 'q'.
 void serial_send_preset_name_to_mainboard() {
 #ifdef ENABLE_DCO_LINK
   serial_frame_write(DCO_PORT, INPUT_CMD_PRESET_NAME, presetNameVal, INPUT_SERIAL_LEN_PRESET_NAME);
@@ -132,7 +132,7 @@ static void __not_in_flash_func(input_handle_param32_from_dco)(char, const uint8
   if (oscIndex < NUM_OSCILLATORS) {
     manualCalibrationInitAmpCompOffset[oscIndex] = offset;
     if (manualCalibration) {
-      uint8_t currentIndex = (uint8_t)manualCalibrationStage / 2;
+      uint8_t currentIndex = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
       if (oscIndex == currentIndex) {
         serialSendParamByteToScreen(
           ParamId::PARAM_MANUAL_CALIBRATION_OFFSET,
@@ -143,8 +143,10 @@ static void __not_in_flash_func(input_handle_param32_from_dco)(char, const uint8
   }
 }
 
-// DCO→Input persistable 'p' mirror (USB/MIDI/dco_control). Write LittleFS
-// locals, forward wire 'p' to Screen toasts. Never re-TX to DCO (loop / Aux).
+// DCO→Input persistable 'p' mirror (USB/MIDI/dco_control, and now DCO-side
+// preset loads too). Update the in-RAM synth-state locals below (no LittleFS
+// involved — Input has none), forward wire 'p' to Screen toasts. Never re-TX
+// to DCO (loop / Aux).
 static void input_handle_param16_from_dco(char, const uint8_t* payload, uint8_t len) {
   if (len != INPUT_SERIAL_LEN_PARAM_16) {
     return;
@@ -186,7 +188,7 @@ static void input_handle_param16_from_dco(char, const uint8_t* payload, uint8_t 
       case ParamId::PARAM_ADSR3_ENABLED:          ADSR3Enabled = (v != 0); break;
 
       case ParamId::PARAM_ADSR3_TO_OSC_SELECT:
-        ADSR3ToOscSelect = (int8_t)constrain(v, 0, 2);
+        ADSR3ToOscSelect = (int8_t)constrain(v, 0, INPUT_ADSR3_TO_OSC_SELECT_MAX);
         break;
 
       case ParamId::PARAM_LFO1_WAVEFORM: LFO1Waveform = (int8_t)v; break;
@@ -276,9 +278,28 @@ static void input_handle_param16_from_dco(char, const uint8_t* payload, uint8_t 
   serial_forward_param16_to_screen(payload, len);
 }
 
+// 'd' filter block echoed back after a preset recall (and, on DCO4, after any
+// Mainboard-side filter change). Track the locals so the pots pick up from the
+// recalled values, and pass the frame on for the Screen's filter display.
+static void input_handle_filter_block_from_dco(char, const uint8_t* payload, uint8_t len) {
+  if (len != INPUT_SERIAL_LEN_FILTER_BLOCK) return;
+
+  CUTOFF     = decode_u16_le(payload + 0);
+  RESONANCE  = decode_u16_le(payload + 2);
+  ADSR2toVCF = decode_i16_le(payload + 4);
+  LFO2toVCF  = decode_u16_le(payload + 6);
+
+#ifdef ENABLE_SCREEN_LINK
+  serial_frame_write(SCREEN_PORT, INPUT_CMD_FILTER_BLOCK, payload, INPUT_SERIAL_LEN_FILTER_BLOCK);
+#endif
+}
+
 static const SerialCommandDef dcoLinkCommands[] = {
   { INPUT_CMD_PARAM_16, INPUT_SERIAL_LEN_PARAM_16, input_handle_param16_from_dco },
   { INPUT_CMD_PARAM_32, INPUT_SERIAL_LEN_PARAM_32, input_handle_param32_from_dco },
+  { INPUT_CMD_FILTER_BLOCK, INPUT_SERIAL_LEN_FILTER_BLOCK, input_handle_filter_block_from_dco },
+  { INPUT_CMD_PRESET_DIR_ENTRY, INPUT_SERIAL_LEN_PRESET_DIR_ENTRY, input_handle_preset_dir_entry },
+  { INPUT_CMD_PRESET_LOADED,    INPUT_SERIAL_LEN_PRESET_LOADED,    input_handle_preset_loaded    },
 };
 
 static SerialCommandTable dcoLinkLut;

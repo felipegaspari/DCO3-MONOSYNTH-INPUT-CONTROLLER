@@ -6,7 +6,7 @@ byte noteEnd[NUM_VOICES];
 byte velocity[NUM_VOICES];
 byte note[NUM_VOICES];
 
-byte voiceMode = 0;
+byte voiceMode = INPUT_DEFAULT_VOICE_MODE;
 byte syncMode = 0;
 byte currentVoice = 0;
 int16_t unisonDetune = 0;
@@ -21,7 +21,7 @@ int16_t calibrationVal;
 //
 bool manualCalibration = false;
 int8_t manualCalibrationStage = 0;
-int8_t manualCalibrationInitAmpCompOffset[NUM_OSCILLATORS] = { 0, 0, 0 };  
+int8_t manualCalibrationInitAmpCompOffset[NUM_OSCILLATORS] = { 0 };
 
 int8_t velocityToVCF = 0;
 int8_t velocityToVCA = 0;

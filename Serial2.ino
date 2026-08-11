@@ -5,7 +5,7 @@ static inline INPUT_ALWAYS_INLINE void pack_u16_le4(uint8_t* dst, uint16_t a, ui
   encode_u16_le(dst + 6, d);
 }
 
-// @1 ms / preset load: TX manual control blocks to the DCO, and 'a'/'b' to the Screen.
+// @1 ms / preset load: slim LE 'a'..'d'/'p' out on DCO_PORT, and 'a'/'b' to the Screen.
 void __not_in_flash_func(serial_send_manual_controls)(bool presetLoading) {
   if (faderRow1ControlManual || presetLoading) {
     uint8_t dataArrayDCO[8];
@@ -88,97 +88,7 @@ void __not_in_flash_func(serial_send_manual_controls)(bool presetLoading) {
   }
 }
 
-// Legacy flag-driven DCO TX (portamento/sync/etc). Not scheduled in loop1 today.
-// Gates are `>= 1`: a hardware UART reports 0 or 1, never a free-byte count, so
-// asking for room for a whole frame would never let anything through. A full FIFO
-// leaves the flag set for the next call.
-void sendSerial() {  // to DCO
-
-
-  if (serial_send_portamentoFlag) {
-    if (DCO_PORT.availableForWrite() >= 1) {
-      byte byteArray[2] = { (uint8_t)'r', (uint8_t)portamentoTime };
-      DCO_PORT.write(byteArray, 2);
-      serial_send_portamentoFlag = false;
-    }
-  }
-
-  if (serial_send_oscSyncModeFlag) {
-    if (DCO_PORT.availableForWrite() >= 1) {
-      byte byteArray[2] = { (uint8_t)'t', (uint8_t)oscSyncMode };
-      DCO_PORT.write(byteArray, 2);
-      serial_send_oscSyncModeFlag = false;
-    }
-  }
-
-  if (serial_send_OSC1IntervalFlag) {
-    if (DCO_PORT.availableForWrite() >= 1) {
-      byte byteArray[2] = { (uint8_t)'y', (uint8_t)OSC1Interval };
-      DCO_PORT.write(byteArray, 2);
-      serial_send_OSC1IntervalFlag = false;
-    }
-  }
-
-  if (serial_send_OSC2IntervalFlag) {
-    if (DCO_PORT.availableForWrite() >= 1) {
-      byte byteArray[2] = { (uint8_t)'z', (uint8_t)OSC2Interval };
-      DCO_PORT.write(byteArray, 2);
-      serial_send_OSC2IntervalFlag = false;
-    }
-  }
-
-  if (serial_send_LFO1SpeedFlag) {
-    if (DCO_PORT.availableForWrite() >= 1) {
-      byte *b = (byte *)&LFO1Speed;
-      byte byteArray[3] = { (byte)'l', b[0], b[1] };
-      DCO_PORT.write(byteArray, 3);
-      serial_send_LFO1SpeedFlag = false;
-    }
-  }
-
-  if (serial_send_LFO1toDCOFlag) {
-    if (DCO_PORT.availableForWrite() >= 1) {
-      byte *b = (byte *)&LFO1toDCO;
-      byte byteArray[3] = { (byte)'m', b[0], b[1] };
-      DCO_PORT.write(byteArray, 3);
-      serial_send_LFO1toDCOFlag = false;
-    }
-  }
-
-  if (serial_send_LFO1toDCOWaveChangeFlag) {
-    if (DCO_PORT.availableForWrite() >= 1) {
-      byte byteArray[2] = { (uint8_t)'b', (uint8_t)LFO1Waveform };
-      DCO_PORT.write(byteArray, 2);
-      serial_send_LFO1toDCOWaveChangeFlag = false;
-    }
-  }
-
-  if (serialSendADSR3ControlValuesFlag) {
-    if (DCO_PORT.availableForWrite() >= 1) {
-      byte ADSR3BytesArray[5];
-      ADSR3BytesArray[0] = (byte)'s';
-      ADSR3BytesArray[1] = (byte)(ADSR3_attack / 16);
-      ADSR3BytesArray[2] = (byte)(ADSR3_decay / 16);
-      ADSR3BytesArray[3] = (byte)(ADSR3_sustain / 16);
-      ADSR3BytesArray[4] = (byte)(ADSR3_release / 16);
-      DCO_PORT.write(ADSR3BytesArray, 5);
-      serialSendADSR3ControlValuesFlag = false;
-    }
-  }
-
-  if (serialSendADSR3toDCOFlag) {
-    if (DCO_PORT.availableForWrite() >= 1) {
-      byte *b = (byte *)&ADSR3toDETUNE1;
-      byte byteArray[3] = { (byte)'w', b[0], b[1] };
-      DCO_PORT.write(byteArray, 3);
-      serialSendADSR3toDCOFlag = false;
-    }
-  }
-  if (serialSendADSR3ToOscSelectFlag) {
-    if (DCO_PORT.availableForWrite() >= 1) {
-      byte byteArray[2] = { (byte)'c', (uint8_t)ADSR3ToOscSelect };
-      DCO_PORT.write(byteArray, 2);
-      serialSendADSR3ToOscSelectFlag = false;
-    }
-  }
+// Legacy flag-driven big-endian TX ('r'/'t'/'y'/'z'/'l'/'m'/'b'/'s'/'w'/'c')
+// retired; the panel uses the slim LE frames above.
+void sendSerial() {
 }

@@ -3,8 +3,9 @@
 #include "sram_hot.h"
 //#include <Adafruit_TinyUSB.h>
 
-#define NUM_VOICES 1
-#define NUM_OSCILLATORS 3
+// Selects DCO3-MONOSYNTH vs DCO4-REBORN and derives voice count, UART wiring and
+// panel layout from it. This is the only per-instrument file in the sketch.
+#include "board_model.h"
 
 int8_t OSC1Interval = 24;
 int8_t OSC2Interval = 36;  // 36 ⇒ unison with OSC1 (wire bias; display = value - 36)
@@ -40,8 +41,6 @@ int16_t VCALevel = 0;
 
 #include "formulas.h"
 
-#include "FS.h"
-
 #include "LED_control.h"
 
 
@@ -59,14 +58,14 @@ void setup() {
 }
 
 void setup1() {
-  // Core1 boot: UARTs, LEDs, LittleFS presets, LED PWM.
+  // Core1 boot: UARTs, LEDs, preset directory fetch, LED PWM.
 #ifdef ENABLE_SERIAL
   Serial.begin(2000000);
 #endif
 #ifdef ENABLE_DCO_LINK
-  // Serial1: TX GP0 -> DCO GP21, RX GP1 <- DCO GP20
-  DCO_PORT.setRX(1);
-  DCO_PORT.setTX(0);
+  // DCO3: straight to the DCO. DCO4: to the Mainboard, which relays to the DCO.
+  DCO_PORT.setRX(INPUT_DCO_RX_PIN);
+  DCO_PORT.setTX(INPUT_DCO_TX_PIN);
   DCO_PORT.setPollingMode(false);
   DCO_PORT.setFIFOSize(512);
   DCO_PORT.begin(2500000);
@@ -74,9 +73,9 @@ void setup1() {
 #endif
 
 #ifdef ENABLE_SCREEN_LINK
-  // Serial2: TX GP4 -> Screen GP13; RX GP5 unwired
-  SCREEN_PORT.setRX(5);
-  SCREEN_PORT.setTX(4);
+  // TX only; the Screen never transmits back.
+  SCREEN_PORT.setRX(INPUT_SCREEN_RX_PIN);
+  SCREEN_PORT.setTX(INPUT_SCREEN_TX_PIN);
   SCREEN_PORT.setPollingMode(false);
   SCREEN_PORT.setFIFOSize(512);
   SCREEN_PORT.begin(2500000);
@@ -84,15 +83,17 @@ void setup1() {
 
   init_LED_control();
 
-  initFS();
+  // Preset storage lives on the DCO now (preset_store.h); Input just fetches
+  // the 256-slot name directory into RAM. Boot-time preset *recall* is the
+  // DCO's own job (preset_store_boot_recall()), not Input's.
+  request_preset_directory();
 
-
-
-  // GP5 ends up a PWM output here, which takes it back from the setRX(5) above.
-  // Costs nothing: GP5 has no conductor, and the Screen never transmits.
+#if INPUT_HAS_LED_PWM
+  // GP5 ends up a PWM output here, which takes it back from the setRX above.
   pinMode(PIN_LED_PWM, OUTPUT);
   analogWriteFreq(200000);
   analogWrite(PIN_LED_PWM, 245);
+#endif
 }
 
 void __not_in_flash_func(loop1)() {
@@ -107,19 +108,6 @@ void __not_in_flash_func(loop1)() {
     setControlValues();  //LO HACE EL INPUT BOARD
     serial_send_manual_controls(false);
   }
-
-  if (timer5msFlag2) {
-    if (ADSR3Enabled && ADSR3toDETUNE1 != 0) {
-      serialSendADSR3ControlValuesFlag = true;
-    }
-  }
-
-
-  // if (timer99microsFlag2) {
-  // sendSerial();
-  // }
-
-  // unsigned long tiempodeejecuciontotal = micros() - loopStartMicros;
 
   if (timer31msFlag2) {
     LED_Control_Mux.update();

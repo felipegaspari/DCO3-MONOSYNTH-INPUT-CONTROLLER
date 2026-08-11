@@ -285,7 +285,6 @@ void __not_in_flash_func(read_encoders)() {
           }
           oscSyncMode = constrain(oscSyncMode, 0, 225);
         }
-        serial_send_oscSyncModeFlag = true;
         serial_send_param_change_byte(ParamId::PARAM_OSC_SYNC_MODE, (uint8_t)oscSyncMode);
         break;
 
@@ -464,8 +463,7 @@ void __not_in_flash_func(read_encoders)() {
         } else {
           presetSelectVal = constrain(presetSelectVal, 0, 255);
 
-          loadPreset(presetSelectVal);
-          //serial_send_param_change_byte(141, presetSelectVal);
+          preset_load_from_board(presetSelectVal);
         }
         break;
 
@@ -500,8 +498,8 @@ void __not_in_flash_func(read_encoders)() {
           } else {
             manualCalibrationStage = manualCalibrationStage - 1;
           }
-          manualCalibrationStage = constrain(manualCalibrationStage, 0, 5);  // 3 oscs × 2 (SAW+pulse)
-          uint8_t index = (uint8_t)manualCalibrationStage / 2;
+          manualCalibrationStage = constrain(manualCalibrationStage, 0, INPUT_CAL_STAGE_MAX);
+          uint8_t index = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
           // Notify the DCO of the new manual calibration stage + its
           // per-oscillator offset so the DCO uses the correct value.
           serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_STAGE,
@@ -523,7 +521,7 @@ void __not_in_flash_func(read_encoders)() {
         }
       case ACTION_CALIBRATION_OFFSET:
         {
-          uint8_t index = (uint8_t)manualCalibrationStage / 2;
+          uint8_t index = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
           if (direction == DIR_CW) {
             manualCalibrationInitAmpCompOffset[index] = manualCalibrationInitAmpCompOffset[index] + 1;
           } else {
