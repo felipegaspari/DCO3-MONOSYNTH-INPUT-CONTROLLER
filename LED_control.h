@@ -22,6 +22,12 @@ uint8_t LEDPins[16] = { 5, 4, 3, 2, 1, 0, 7, 6, 11, 12, 9, 10, 8, 8, 8, 8 };
 bool LEDState[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 bool LEDBlink[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
+// Set by anything that changes state behind an LED without driving the pins
+// itself (the DCO param mirror, a preset recall). loop1 turns it into a single
+// set_LED_Status(16, 0), so a recall's burst of wave enables costs one refresh
+// instead of one per param.
+bool ledRefreshPending = false;
+
 void init_LED_control();
 void set_LED_Status(byte LEDNumber, byte LEDStatus);
 void update_LED_Control(byte LEDnumber, byte LEDStatus);

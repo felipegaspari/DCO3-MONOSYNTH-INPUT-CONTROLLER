@@ -33,7 +33,7 @@ void __not_in_flash_func(set_LED_Status)(byte LEDNumber, byte LEDStatus) {
     update_LED_Control(16, 0);
 
   } else {
-    LEDState[LEDNumber] = LEDState;
+    LEDState[LEDNumber] = LEDStatus;
     update_LED_Control(LEDNumber, LEDStatus);
   }
 }

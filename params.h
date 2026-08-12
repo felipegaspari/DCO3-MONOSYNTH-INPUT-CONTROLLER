@@ -7,6 +7,9 @@ byte velocity[NUM_VOICES];
 byte note[NUM_VOICES];
 
 byte voiceMode = INPUT_DEFAULT_VOICE_MODE;
+// Mirror only: allocation happens on the DCO. Kept so the panel cache and a
+// preset recall agree on what the synth is set to.
+byte voiceAllocMode = 0;
 byte syncMode = 0;
 byte currentVoice = 0;
 int16_t unisonDetune = 0;

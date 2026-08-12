@@ -140,13 +140,17 @@ void __not_in_flash_func(read_encoder_buttons)() {
             serial_send_param_change_byte(ParamId::PARAM_UI_CALIBRATION_DISMISS, 0);
             break;
           case SELECT:
+            // Menu positions follow the Screen's calibration tabs; the
+            // PARAM_CALIBRATION_FLAG value picks the stage on the DCO.
             switch (menuPos) {
-              case 0:
+              case 0:  // AUTO CALIBRATION: amp-comp tables only
                 serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 1);
                 break;
-              case 1:
+              case 1:  // PW CALIBRATION: PW center + limits only
+                serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 2);
                 break;
-              case 2:
+              case 2:  // FULL CALIBRATION: PW stage, then amp-comp
+                serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 3);
                 break;
               case 3:
                 currentButtonAction = TG_MAN_CALIBRATION;

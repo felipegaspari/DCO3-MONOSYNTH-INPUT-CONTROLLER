@@ -8,6 +8,11 @@
 // Nothing in this sketch differs between DCO3-MONOSYNTH and DCO4-REBORN.
 #include "board_model.h"
 
+#if INPUT_IS_DCO4
+static bool preset_dir_retry_pending = false;
+static uint32_t preset_dir_retry_at_ms = 0;
+#endif
+
 int8_t OSC1Interval = 24;
 int8_t OSC2Interval = 36;  // 36 ⇒ unison with OSC1 (wire bias; display = value - 36)
 int8_t OSC3Interval = 36;
@@ -94,6 +99,11 @@ void setup1() {
   // DCO's own job (preset_store_boot_recall()), not Input's.
   request_preset_directory();
 
+#if INPUT_IS_DCO4
+  preset_dir_retry_pending = true;
+  preset_dir_retry_at_ms = millis() + 2000u;
+#endif
+
 #if INPUT_HAS_LED_PWM
   // GP5 ends up a PWM output here, which takes it back from the setRX above.
   pinMode(PIN_LED_PWM, OUTPUT);
@@ -103,16 +113,23 @@ void setup1() {
 }
 
 void __not_in_flash_func(loop1)() {
-  // Core1: map manual controls, TX blocks, LED refresh, DCO 'x' relay.
+  // Core1: map manual controls, TX blocks, LED refresh, Mainboard/DCO RX relay.
+  // Drain inbound frames before any panel TX so a blocked DCO_PORT write cannot
+  // let the Mainboard mirror backlog overflow the RX FIFO.
+  serial_read_from_dco();
 
   unsigned long loopStartMicros = micros();
 
   millisTimer2();
 
-  
   if (timer1msFlag2) {
     setControlValues();  //LO HACE EL INPUT BOARD
     serial_send_manual_controls(false);
+  }
+
+  if (ledRefreshPending) {
+    ledRefreshPending = false;
+    set_LED_Status(16, 0);
   }
 
   if (timer31msFlag2) {
@@ -126,7 +143,14 @@ void __not_in_flash_func(loop1)() {
     //serial_send_param_change(15, ADSR3toDETUNE1_formula * 100000);
     //Serial.println(tiempodeejecuciontotal);
   }
-  // DCO hub RX (GP1) — forward gap 154 to the Screen; store cal offset 155
+#if INPUT_IS_DCO4
+  if (preset_dir_retry_pending && preset_dir_retry_at_ms != 0 &&
+      (int32_t)(millis() - preset_dir_retry_at_ms) >= 0) {
+    preset_dir_retry_pending = false;
+    preset_dir_retry_at_ms = 0;
+    request_preset_directory();
+  }
+#endif
   serial_read_from_dco();
 }
 
@@ -173,8 +197,6 @@ void __not_in_flash_func(loop)() {
 #ifdef ENABLE_SERIAL
   //drawTM(tiempodeejecucion);
   if (timer200msFlag) {
-
-   Serial.println("|");
   }
   if (1 == 2) {
   //if (timer99microsFlag) {58

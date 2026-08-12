@@ -44,9 +44,12 @@ void input_handle_preset_loaded(char, const uint8_t* payload, uint8_t len) {
   presetSelectVal = currentPreset;
   memcpy(presetName, presetDir[slot], 16);
   presetNameString = String((char*)presetName);
+  ledRefreshPending = true;
 
+  // No signal here: the DCO brackets its own recall mirror with Silent/PresetScroll
+  // (preset_store.ino), and this frame travels the independent Screen link, so
+  // sending it would race ahead of the mirror and lift the silence early.
   serial_send_preset_scroll(currentPreset, presetName);
-  serial_send_signal(1);  // Screen silence ENDs
 }
 
 // Copy preset name bytes into caller array (from the local RAM cache; no
@@ -125,9 +128,12 @@ void preset_load_from_board(uint16_t slot) {
   presetSelectVal = currentPreset;
   memcpy(presetName, presetDir[slot], 16);
   presetNameString = String((char*)presetName);
+  ledRefreshPending = true;
 
+  // Optimistic, and deliberately ahead of the DCO: this lands before the DCO's
+  // own Silent marker, so it cannot cut the recall silence short.
   serial_send_preset_scroll(currentPreset, presetName);
-  serial_send_signal(1);  // Screen silence ENDs
+  serial_send_signal(1);
 }
 
 // Post-save UI/state cleanup (clear session manual flags, refresh LEDs).

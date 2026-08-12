@@ -75,12 +75,22 @@ void __not_in_flash_func(serialSendParamByteToScreen)(byte paramNumber, byte par
 }
 
 // ---------------------------------------------------------------------------
-// Parser-based receiver for DCO 'x' / persistable 'p' on DCO_PORT RX
-// (GP1 <- DCO GP20).
+// Parser-based receiver for Mainboard/DCO slim frames on DCO_PORT RX
+// (DCO4: GP5 <- Mainboard PE1; DCO3: GP1 <- DCO GP20).
+//
+// One rule decides who mirrors the DCO to the Screen: whoever is one hop away.
+// On DCO3 that is this board, because the Screen has no other link. On DCO4 the
+// Mainboard drives the Screen's USART1 itself, so relaying a DCO-origin frame on
+// from here would deliver it twice — and the second copy would land after the
+// end-of-silence marker that closes a preset recall, dropping a parameter toast
+// back on top of the preset name. Hence INPUT_RELAYS_DCO_TO_SCREEN below; this
+// link still carries everything panel-origin on both models.
 // ---------------------------------------------------------------------------
 
+#define INPUT_RELAYS_DCO_TO_SCREEN INPUT_IS_DCO3
+
 static void __not_in_flash_func(serial_forward_param32_to_screen)(const uint8_t* payload, uint8_t len) {
-#ifdef ENABLE_SCREEN_LINK
+#if defined(ENABLE_SCREEN_LINK) && INPUT_RELAYS_DCO_TO_SCREEN
   if (len != INPUT_SERIAL_LEN_PARAM_32) {
     return;
   }
@@ -93,7 +103,7 @@ static void __not_in_flash_func(serial_forward_param32_to_screen)(const uint8_t*
 
 // Relay persistable DCO→Input 'p' mirror to Screen toasts (wire i16, not locals).
 static void serial_forward_param16_to_screen(const uint8_t* payload, uint8_t len) {
-#ifdef ENABLE_SCREEN_LINK
+#if defined(ENABLE_SCREEN_LINK) && INPUT_RELAYS_DCO_TO_SCREEN
   if (len != INPUT_SERIAL_LEN_PARAM_16) {
     return;
   }
@@ -172,15 +182,17 @@ static void input_handle_param16_from_dco(char, const uint8_t* payload, uint8_t 
     }
   } else {
     switch (id) {
-      case ParamId::PARAM_OSC1_SAW_ENABLE:    waveEnable[0][0] = (v != 0); break;
-      case ParamId::PARAM_OSC1_PULSE_ENABLE:  waveEnable[0][1] = (v != 0); break;
-      case ParamId::PARAM_OSC1_TRI_ENABLE:    waveEnable[0][2] = (v != 0); break;
-      case ParamId::PARAM_OSC2_SAW_ENABLE:    waveEnable[1][0] = (v != 0); break;
-      case ParamId::PARAM_OSC2_PULSE_ENABLE:  waveEnable[1][1] = (v != 0); break;
-      case ParamId::PARAM_OSC2_TRI_ENABLE:    waveEnable[1][2] = (v != 0); break;
-      case ParamId::PARAM_OSC3_SAW_ENABLE:    waveEnable[2][0] = (v != 0); break;
-      case ParamId::PARAM_OSC3_PULSE_ENABLE:  waveEnable[2][1] = (v != 0); break;
-      case ParamId::PARAM_OSC3_TRI_ENABLE:    waveEnable[2][2] = (v != 0); break;
+      // LEDs 0..4 sit behind these (board_model.h inputWaveKeys) and nothing here
+      // drives the shift register, so ask loop1 for a refresh.
+      case ParamId::PARAM_OSC1_SAW_ENABLE:    waveEnable[0][0] = (v != 0); ledRefreshPending = true; break;
+      case ParamId::PARAM_OSC1_PULSE_ENABLE:  waveEnable[0][1] = (v != 0); ledRefreshPending = true; break;
+      case ParamId::PARAM_OSC1_TRI_ENABLE:    waveEnable[0][2] = (v != 0); ledRefreshPending = true; break;
+      case ParamId::PARAM_OSC2_SAW_ENABLE:    waveEnable[1][0] = (v != 0); ledRefreshPending = true; break;
+      case ParamId::PARAM_OSC2_PULSE_ENABLE:  waveEnable[1][1] = (v != 0); ledRefreshPending = true; break;
+      case ParamId::PARAM_OSC2_TRI_ENABLE:    waveEnable[1][2] = (v != 0); ledRefreshPending = true; break;
+      case ParamId::PARAM_OSC3_SAW_ENABLE:    waveEnable[2][0] = (v != 0); ledRefreshPending = true; break;
+      case ParamId::PARAM_OSC3_PULSE_ENABLE:  waveEnable[2][1] = (v != 0); ledRefreshPending = true; break;
+      case ParamId::PARAM_OSC3_TRI_ENABLE:    waveEnable[2][2] = (v != 0); ledRefreshPending = true; break;
 
       case ParamId::PARAM_RESONANCE_COMPENSATION: RESONANCEAmpCompensation = (v != 0); break;
       case ParamId::PARAM_VCA_ADSR_RESTART:       VCAADSRRestart = (v != 0); break;
@@ -207,6 +219,7 @@ static void input_handle_param16_from_dco(char, const uint8_t* payload, uint8_t 
       case ParamId::PARAM_PORTAMENTO_TIME: portamentoTime = v; break;
       case ParamId::PARAM_PORTAMENTO_MODE: portamentoMode = (byte)v; break;
       case ParamId::PARAM_VOICE_MODE:      voiceMode = (byte)constrain(v, 0, 2); break;
+      case ParamId::PARAM_VOICE_ALLOC_MODE: voiceAllocMode = (byte)constrain(v, 0, 5); break;
       case ParamId::PARAM_UNISON_DETUNE:   unisonDetune = v; break;
       case ParamId::PARAM_SYNC_MODE:       syncMode = (byte)v; break;
       case ParamId::PARAM_SOFT_SYNC:       softSync = (uint8_t)v; break;
@@ -278,9 +291,11 @@ static void input_handle_param16_from_dco(char, const uint8_t* payload, uint8_t 
   serial_forward_param16_to_screen(payload, len);
 }
 
-// A UI-only 'p' the Screen displays but the DCO never sees (ids 191-194).
+// A UI-only 'p' the Screen displays but the DCO never sees (ids 191-194). Only
+// the DCO-origin filter mirror uses it, so it follows the same one-hop rule: on
+// DCO4 the Mainboard sends these four ids itself (mb_send_filter_ui_to_screen).
 static void input_send_ui_param_to_screen(uint8_t id, int16_t value) {
-#ifdef ENABLE_SCREEN_LINK
+#if defined(ENABLE_SCREEN_LINK) && INPUT_RELAYS_DCO_TO_SCREEN
   uint8_t payload[INPUT_SERIAL_LEN_PARAM_16];
   encode_param_p(payload, id, value);
   serial_frame_write(SCREEN_PORT, INPUT_CMD_PARAM_16, payload, INPUT_SERIAL_LEN_PARAM_16);
@@ -339,7 +354,7 @@ static void input_apply_adsr_block_from_dco(const uint8_t* payload,
 static void input_forward_adsr_block_to_screen(uint8_t cmd,
                                                uint16_t attack, uint16_t decay,
                                                uint16_t sustain, uint16_t release) {
-#ifdef ENABLE_SCREEN_LINK
+#if defined(ENABLE_SCREEN_LINK) && INPUT_RELAYS_DCO_TO_SCREEN
   uint8_t payload[INPUT_SERIAL_LEN_ADSR_BLOCK];
   encode_u16_le(payload + 0, attack);
   encode_u16_le(payload + 2, decay);
