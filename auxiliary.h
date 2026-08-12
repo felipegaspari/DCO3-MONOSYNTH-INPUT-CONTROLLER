@@ -79,4 +79,29 @@ uint16_t linearToExponential(uint16_t linearValue, float base, uint16_t maxValue
   return scaledExpValue;
 }
 
+// Inverse of linToExpLookup[], for ADSR blocks mirrored back from the DCO: the
+// wire carries the exp-mapped time, the faders and the Screen work in the
+// 0..4095 index domain. The table is monotonic, so a binary search finds the
+// bracket and the nearer of the two ends wins.
+uint16_t exp_to_lin_index(uint16_t expValue) {
+  uint16_t lo = 0;
+  uint16_t hi = LIN_TO_EXP_TABLE_SIZE - 1;
+
+  if (expValue <= linToExpLookup[lo]) return lo;
+  if (expValue >= linToExpLookup[hi]) return hi;
+
+  while ((uint16_t)(hi - lo) > 1) {
+    uint16_t mid = (uint16_t)((lo + hi) >> 1);
+    if (linToExpLookup[mid] <= expValue) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+
+  uint16_t belowGap = (uint16_t)(expValue - linToExpLookup[lo]);
+  uint16_t aboveGap = (uint16_t)(linToExpLookup[hi] - expValue);
+  return (aboveGap < belowGap) ? hi : lo;
+}
+
 #endif

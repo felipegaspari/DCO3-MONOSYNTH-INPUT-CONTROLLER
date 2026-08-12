@@ -98,30 +98,33 @@ The legacy flag-driven big-endian TX path is gone. `sendSerial()` is an empty st
 | `'p'` | Slim `'p'` when `sendToAll`, and the relayed inbound persistable mirror |
 | `'w'` | Screen-only 8-bit UI `[id][u8]` when `sendToAll` |
 | `'x'` | Slim gap 154 relayed from the DCO (`serial_forward_param32_to_screen`) |
-| `'d'` | Filter block relayed from the DCO (`input_handle_filter_block_from_dco`). The Screen does not register `'d'` in its own command table yet, so this frame is currently ignored at the far end |
+| `'p'` 191-194 | `PARAM_UI_CUTOFF` / `_RESONANCE` / `_ADSR2_TO_VCF` / `_LFO2_TO_VCF`, one per field that a mirrored `'d'` actually changed (`input_send_ui_param_to_screen`). The filter pots are analog and have no ParamId of their own, so these UI ids exist purely to give the Screen a name and a toast |
 
 ---
 
 ## Inbound
 
 `serial_read_from_dco()` pumps the parser on `DCO_PORT` every `loop1` iteration.
-`dcoLinkCommands[]` registers five inbound commands (`'p'`, `'x'`, `'d'`, `'O'`, `'L'`), and every
-frame below arrives from the DCO on DCO3 and from the Mainboard, relaying the DCO, on DCO4:
+`dcoLinkCommands[]` registers eight inbound commands (`'p'`, `'x'`, `'a'`, `'b'`, `'c'`, `'d'`,
+`'O'`, `'L'`), and every frame below arrives from the DCO on DCO3 and from the Mainboard, relaying
+the DCO, on DCO4:
 
 | Frame | Handling |
 |-------|----------|
 | `'x'` `PARAM_GAP_FROM_DCO` (154) | Forwarded verbatim as slim `'x'` (5 B `[id][u32 LE]`) to the Screen (`serial_forward_param32_to_screen`). Nothing is stored locally |
 | `'x'` `PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO` (155) | Low 16 bits unpacked as `[oscIndex:8 \| offset:8]` into `manualCalibrationInitAmpCompOffset[oscIndex]` after a `NUM_OSCILLATORS` bounds check; echoed to the Screen as `PARAM_MANUAL_CALIBRATION_OFFSET` when manual calibration is currently showing that oscillator, resolved through `INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage)` |
 | `'p'` persistable ParamIds | Write Input's in-RAM locals only (`input_handle_param16_from_dco`; there is no LittleFS on this board). ADSR3→PWM (46) stores **wire − 512**, `PARAM_ADSR3_TO_OSC_SELECT` is clamped to `INPUT_ADSR3_TO_OSC_SELECT_MAX`, and mod-slot IDs are demultiplexed into `modSlotSource` / `modSlotDest` / `modSlotDepth`. Never re-transmitted to the DCO; the same wire `'p'` is forwarded to the Screen. This is also how a preset recall's mirrored params reach Input |
-| `'d'` filter block | `input_handle_filter_block_from_dco` decodes CUTOFF, RESONANCE, ADSR2toVCF and LFO2toVCF into the locals, then forwards the payload as `'d'` to the Screen. It fires after a preset recall, and on DCO4 also after a Mainboard-side filter change |
+| `'d'` filter block | `input_handle_filter_block_from_dco` decodes CUTOFF, RESONANCE, ADSR2toVCF and LFO2toVCF into the locals and sends a `'p'` 191-194 to the Screen for each field that changed. It fires after a preset recall, a host or MIDI CC filter edit, and on DCO4 also after a Mainboard-side filter change |
+| `'a'` / `'b'` / `'c'` ADSR blocks | `input_handle_adsr{1,2,3}_from_dco` invert A/D/R back through `exp_to_lin_index()` (the wire carries the DCO's exp-mapped times, the faders and the Screen work in the 0..4095 index domain; S is linear on both sides) and store the `ADSR{1,2,3}_*` locals. `'a'` and `'b'` are then re-sent to the Screen in fader units, exactly as the panel's own edits are. `'c'` is locals-only: the Screen link's `'c'` is the save-name char select, and the panel never sent EnvDCO there either |
 | `'O'` preset directory entry | `[slot:u8][name:16]` copied into `presetDir[slot]` (`input_handle_preset_dir_entry`), in response to `'N'` |
 | `'L'` preset loaded | `[slot:u8]` updates `currentPreset` / `presetSelectVal` / `presetName` from the cache and pushes a Screen scroll plus signal 1 (`input_handle_preset_loaded`); it fires after **every** DCO-side load, whether from boot recall, MIDI program change, USB / `dco_control`, or Input itself |
 
-The `'d'` handler is new on DCO3. Before it existed an inbound filter block had no registered
-handler and was dropped, so the panel's own CUTOFF, RESONANCE, ADSR2toVCF and LFO2toVCF values did
-not follow a preset recall and the relay to the Screen did not exist at all. The relay is in place
-now, but the Screen's command table still has no `'d'` entry, so the Screen ignores the frame until
-one is added there.
+Applying an inbound block is unconditional. A preset recall already clears the `*ControlManual`
+flags, and while a row is in manual mode the next 1 ms fader scan simply overwrites what arrived —
+the physical control wins, as it did before.
+
+Nothing here is re-transmitted to the DCO, so the mirror cannot loop: Input's outbound blocks are
+driven by the fader and pot scan, never by what it receives.
 
 The Screen has no link to the DCO, so every gap update and USB/MIDI persistable `'p'` reaches it
 through this relay. `SCREEN_PORT` is TX-only, because the Screen never transmits. See

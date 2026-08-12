@@ -170,13 +170,13 @@ once the load completes, so a load triggered by boot recall / MIDI Program
 Change / USB `dco_control` also updates Input's Screen display, not just
 Input-triggered loads.
 
-Of the four block frames, only `'d'` (filter) is parsed by Input's
-`dcoLinkCommands[]` LUT, via `input_handle_filter_block_from_dco()`: it refreshes
-Input's `CUTOFF` / `RESONANCE` / `ADSR2toVCF` / `LFO2toVCF` locals so the pots
-resume from the recalled values, and passes the frame on to the Screen. The
-three ADSR blocks `'a'`–`'c'` are still ignored here; Input's ADSR locals come
-only from its own faders. Note that the Screen does not register `'d'` either,
-so the forwarded frame is dropped at that end until a handler is added there.
+All four block frames are parsed by Input's `dcoLinkCommands[]` LUT.
+`input_handle_filter_block_from_dco()` refreshes the `CUTOFF` / `RESONANCE` /
+`ADSR2toVCF` / `LFO2toVCF` locals so the pots resume from the recalled values,
+and sends the changed fields to the Screen as the UI ids 191-194.
+`input_handle_adsr{1,2,3}_from_dco()` invert the exp-mapped times back to fader
+indices, refresh the `ADSR*` locals, and re-send `'a'` / `'b'` to the Screen;
+EnvDCO stays off the Screen because `'c'` means char-select on that link.
 
 ---
 

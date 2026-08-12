@@ -175,7 +175,7 @@ TinyUSB MIDI device configuration. Sketch does **not** `#include <Adafruit_TinyU
 
 ### `Serial.h`
 
-`ENABLE_SERIAL` (now **commented out**, so USB debug is off by default) / `ENABLE_DCO_LINK` / `ENABLE_SCREEN_LINK`; the `DCO_PORT` and `SCREEN_PORT` aliases, defined as `INPUT_DCO_PORT_OBJ` / `INPUT_SCREEN_PORT_OBJ` from `board_model.h` rather than named UARTs; commented `SERIAL_FRAMING_COBS`; `SERIAL_INNER_MAX_PAYLOAD 17`; slim framing includes; decls for the param senders plus `serial_read_from_dco` (`'x'` 154/155, persistable `'p'` mirror, `'d'` filter block, `'O'`/`'L'` preset frames) and `init_dco_link_parser`; the Screen signal list as a trailing comment. The legacy TX flags (`serial_send_*Flag`, `serialSendADSR3*`, `sendDetune2Flag`) have been **deleted** along with the `sendSerial()` body they drove. **No function definitions.**
+`ENABLE_SERIAL` (now **commented out**, so USB debug is off by default) / `ENABLE_DCO_LINK` / `ENABLE_SCREEN_LINK`; the `DCO_PORT` and `SCREEN_PORT` aliases, defined as `INPUT_DCO_PORT_OBJ` / `INPUT_SCREEN_PORT_OBJ` from `board_model.h` rather than named UARTs; commented `SERIAL_FRAMING_COBS`; `SERIAL_INNER_MAX_PAYLOAD 17`; slim framing includes; decls for the param senders plus `serial_read_from_dco` (`'x'` 154/155, persistable `'p'` mirror, `'a'`-`'d'` blocks, `'O'`/`'L'` preset frames) and `init_dco_link_parser`; the Screen signal list as a trailing comment. The legacy TX flags (`serial_send_*Flag`, `serialSendADSR3*`, `sendDetune2Flag`) have been **deleted** along with the `sendSerial()` body they drove. **No function definitions.**
 
 ### `Serial.ino`
 
@@ -215,16 +215,28 @@ Outbound slim frames on both links via `serial_frame_write`; inbound `'x'`, pers
 - `input_handle_param32_from_dco(...)` — Decode `'x'`; `PARAM_GAP_FROM_DCO` (154) → forward slim `'x'` to Screen; `PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO` (155) → unpack `[oscIndex:8 | offset:8]` from the low 16 bits into `manualCalibrationInitAmpCompOffset[oscIndex]` after bounds-checking against `NUM_OSCILLATORS`; may echo the offset to the Screen as `PARAM_MANUAL_CALIBRATION_OFFSET` when manual calibration is showing that oscillator, which it resolves with `INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage)` (`static`).
   - **Called from:** the DCO-link LUT via `dcoLinkCommands[]`.
   - **When:** `DCO_PORT` RX of PARAM32.
-- `input_handle_filter_block_from_dco(...)` — Decode the inbound `'d'` filter block (8 B) into `CUTOFF`, `RESONANCE`, `ADSR2toVCF`, `LFO2toVCF`, then forward the same payload as `'d'` to the Screen (`static`). Keeps the local values in step with a recall, so the VCF pots pick up from the recalled values. **New on DCO3:** an inbound `'d'` used to be dropped here for want of a handler. Note that the Screen's own `screenSerial1Commands[]` does not register `'d'` yet, so the forwarded frame reaches it but is currently ignored; the local update is the part that takes effect today.
+- `input_send_ui_param_to_screen(uint8_t id, int16_t value)` — Write a `'p'` to `SCREEN_PORT` only (`static`), used for the UI-only ids 191-194 the DCO never sees.
+  - **Called from:** `input_handle_filter_block_from_dco`.
+  - **When:** Each filter field that a mirrored `'d'` changed; body under `#ifdef ENABLE_SCREEN_LINK`.
+- `input_handle_filter_block_from_dco(...)` — Decode the inbound `'d'` filter block (8 B) into `CUTOFF`, `RESONANCE`, `ADSR2toVCF`, `LFO2toVCF`, then send `PARAM_UI_CUTOFF` / `_RESONANCE` / `_ADSR2_TO_VCF` / `_LFO2_TO_VCF` (191-194) to the Screen for each field that actually changed (`static`). Keeps the local values in step with a recall, so the VCF pots pick up from the recalled values. The Screen has no `'d'` display — the filter pots are analog and have no `ParamId` of their own — which is why the UI ids exist.
   - **Called from:** the DCO-link LUT via `dcoLinkCommands[]`.
-  - **When:** `DCO_PORT` RX of a filter block — after a preset recall, and on DCO4 after any Mainboard-side filter change.
+  - **When:** `DCO_PORT` RX of a filter block — after a preset recall or a host / MIDI CC filter edit, and on DCO4 after any Mainboard-side filter change.
+- `input_apply_adsr_block_from_dco(payload, attack&, decay&, sustain&, release&)` — Invert A/D/R through `exp_to_lin_index()` and pass S through, writing one `ADSR{1,2,3}_*` group (`static`). The wire carries the DCO's exp-mapped times; the faders and the Screen work in the 0..4095 index domain.
+  - **Called from:** `input_handle_adsr1_from_dco` / `..._adsr2_from_dco` / `..._adsr3_from_dco`.
+- `input_forward_adsr_block_to_screen(cmd, a, d, s, r)` — Pack the fader-domain values and write `'a'` or `'b'` to `SCREEN_PORT` (`static`), the same frame the panel's own edits send.
+  - **When:** Body under `#ifdef ENABLE_SCREEN_LINK`.
+- `input_handle_adsr1_from_dco(...)` / `input_handle_adsr2_from_dco(...)` — Apply the mirrored EnvVCA / EnvVCF block to the locals, then forward it to the Screen (`static`). Applying is unconditional: a recall clears the manual flags, and in manual mode the next fader scan overwrites it.
+  - **Called from:** the DCO-link LUT via `dcoLinkCommands[]`.
+  - **When:** `DCO_PORT` RX after a preset recall, a host / MIDI CC envelope edit, or (DCO4) a Mainboard relay.
+- `input_handle_adsr3_from_dco(...)` — Same for EnvDCO, locals only (`static`). The Screen link's `'c'` is the save-name char select, and the panel never sent EnvDCO there either.
+  - **Called from:** the DCO-link LUT via `dcoLinkCommands[]`.
 - `input_handle_preset_dir_entry(...)` — Decode `'O'` (`[slot:u8][name:16]`); copy the 16 name bytes into `presetDir[slot]` (`presetStorage.ino`).
   - **Called from:** the DCO-link LUT via `dcoLinkCommands[]`.
   - **When:** `DCO_PORT` RX of each directory entry, in response to `request_preset_directory()`.
 - `input_handle_preset_loaded(...)` — Decode `'L'` (`[slot:u8]`); set `currentPreset`, copy `presetDir[slot]` into `presetName`, `serial_send_preset_scroll()` + `serial_send_signal(1)` to Screen (`presetStorage.ino`).
   - **Called from:** the DCO-link LUT via `dcoLinkCommands[]`.
   - **When:** `DCO_PORT` RX after any successful DCO-side `preset_store_load()` (boot recall, MIDI PC, USB/`dco_control`, or Input-triggered).
-- `init_dco_link_parser()` — Fill `dcoLinkLut` from `dcoLinkCommands[]`, which registers five inbound commands: `'p'`, `'x'`, `'d'`, `'O'`, `'L'`.
+- `init_dco_link_parser()` — Fill `dcoLinkLut` from `dcoLinkCommands[]`, which registers eight inbound commands: `'p'`, `'x'`, `'a'`, `'b'`, `'c'`, `'d'`, `'O'`, `'L'`.
   - **Called from:** `setup1()` after `DCO_PORT.begin`.
 - `serial_read_from_dco()` — `serial_parser_drain` on `DCO_PORT` (budget 64).
   - **Called from:** `loop1()` every iteration.
@@ -440,7 +452,9 @@ Dual soft-timer timestamps + flags (Core0 `timer*Flag`, Core1 `timer*Flag2`). **
 
 ### `auxiliary.h`
 
-Kalman filter bank, `linToExpLookup[4096]`, inline math helpers.
+Kalman filter bank, `linToExpLookup[4096]`, inline math helpers, and
+`exp_to_lin_index()` — the binary-search inverse of the lookup, used by the
+inbound ADSR mirror to get back from the DCO's exp domain to a fader index.
 
 **Functions** (inline in header)
 - `mapFloat(...)` — Float map.
@@ -529,6 +543,6 @@ All detailed docs live under `docs/` (this file included). Root `README.md` is t
 | Panel LEDs / brightness PWM pin | `LED_control.h` / `LED_control.ino` (`PIN_LED_PWM` GPIO 5, DCO3 only) |
 | ADSR lin→exp for the DCO | `auxiliary.ino` / `linearToExponential` / use in `Serial2.ino` |
 | Preset layout / load/save | `presetStorage.ino` (RAM cache + `'N'`/`'O'`/`'L'`; storage itself lives on the DCO, see `DCO/preset_store.ino`) |
-| RX `'x'` (gap 154 relay / cal offset 155), persistable `'p'`, `'d'` filter block, preset dir/loaded (`'O'`/`'L'`) | `Serial.ino` `serial_read_from_dco` + `input_handle_param32_from_dco` / `input_handle_param16_from_dco` / `input_handle_filter_block_from_dco` / `input_handle_preset_dir_entry` / `input_handle_preset_loaded` (+ Screen forward) |
+| RX `'x'` (gap 154 relay / cal offset 155), persistable `'p'`, `'a'`-`'d'` blocks, preset dir/loaded (`'O'`/`'L'`) | `Serial.ino` `serial_read_from_dco` + `input_handle_param32_from_dco` / `input_handle_param16_from_dco` / `input_handle_adsr{1,2,3}_from_dco` / `input_handle_filter_block_from_dco` / `input_handle_preset_dir_entry` / `input_handle_preset_loaded` (+ Screen forward) |
 | Legacy flag-driven DCO TX | Gone: `sendSerial()` is an empty stub and its flags were removed. Use `serial_send_param_change(_byte)` |
 | Formulas / inbound param router | Currently dead: `formulas.*`, `params.ino`, `param_router.h` |

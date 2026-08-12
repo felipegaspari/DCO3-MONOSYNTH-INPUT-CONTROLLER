@@ -278,25 +278,110 @@ static void input_handle_param16_from_dco(char, const uint8_t* payload, uint8_t 
   serial_forward_param16_to_screen(payload, len);
 }
 
+// A UI-only 'p' the Screen displays but the DCO never sees (ids 191-194).
+static void input_send_ui_param_to_screen(uint8_t id, int16_t value) {
+#ifdef ENABLE_SCREEN_LINK
+  uint8_t payload[INPUT_SERIAL_LEN_PARAM_16];
+  encode_param_p(payload, id, value);
+  serial_frame_write(SCREEN_PORT, INPUT_CMD_PARAM_16, payload, INPUT_SERIAL_LEN_PARAM_16);
+#else
+  (void)id;
+  (void)value;
+#endif
+}
+
 // 'd' filter block echoed back after a preset recall (and, on DCO4, after any
 // Mainboard-side filter change). Track the locals so the pots pick up from the
-// recalled values, and pass the frame on for the Screen's filter display.
+// recalled values. The Screen has no 'd' handler — the filter pots are analog
+// and have no ParamId of their own — so the changed fields go out as the UI
+// 'p' ids instead, which reuse the Screen's normal name/toast path.
 static void input_handle_filter_block_from_dco(char, const uint8_t* payload, uint8_t len) {
   if (len != INPUT_SERIAL_LEN_FILTER_BLOCK) return;
 
-  CUTOFF     = decode_u16_le(payload + 0);
-  RESONANCE  = decode_u16_le(payload + 2);
-  ADSR2toVCF = decode_i16_le(payload + 4);
-  LFO2toVCF  = decode_u16_le(payload + 6);
+  const uint16_t cutoff     = decode_u16_le(payload + 0);
+  const uint16_t resonance  = decode_u16_le(payload + 2);
+  const int16_t  adsr2toVCF = decode_i16_le(payload + 4);
+  const int16_t  lfo2toVCF  = (int16_t)decode_u16_le(payload + 6);
 
+  if (cutoff != CUTOFF) {
+    CUTOFF = cutoff;
+    input_send_ui_param_to_screen((uint8_t)ParamId::PARAM_UI_CUTOFF, (int16_t)cutoff);
+  }
+  if (resonance != RESONANCE) {
+    RESONANCE = resonance;
+    input_send_ui_param_to_screen((uint8_t)ParamId::PARAM_UI_RESONANCE, (int16_t)resonance);
+  }
+  if (adsr2toVCF != ADSR2toVCF) {
+    ADSR2toVCF = adsr2toVCF;
+    input_send_ui_param_to_screen((uint8_t)ParamId::PARAM_UI_ADSR2_TO_VCF, adsr2toVCF);
+  }
+  if (lfo2toVCF != LFO2toVCF) {
+    LFO2toVCF = lfo2toVCF;
+    input_send_ui_param_to_screen((uint8_t)ParamId::PARAM_UI_LFO2_TO_VCF, lfo2toVCF);
+  }
+}
+
+// 'a'/'b'/'c' echoed back for the same reasons as 'd'. The wire carries the
+// exp-mapped times the DCO wants; the faders and the Screen work in the 0..4095
+// index domain, so A/D/R are inverted back through the lookup table (S is
+// linear on both sides). Applying is unconditional: a preset recall already
+// clears the manual flags, and while a row is in manual mode the next fader
+// scan simply overwrites this.
+static void input_apply_adsr_block_from_dco(const uint8_t* payload,
+                                            uint16_t& attack, uint16_t& decay,
+                                            uint16_t& sustain, uint16_t& release) {
+  attack  = exp_to_lin_index(decode_u16_le(payload + 0));
+  decay   = exp_to_lin_index(decode_u16_le(payload + 2));
+  sustain = decode_u16_le(payload + 4);
+  release = exp_to_lin_index(decode_u16_le(payload + 6));
+}
+
+static void input_forward_adsr_block_to_screen(uint8_t cmd,
+                                               uint16_t attack, uint16_t decay,
+                                               uint16_t sustain, uint16_t release) {
 #ifdef ENABLE_SCREEN_LINK
-  serial_frame_write(SCREEN_PORT, INPUT_CMD_FILTER_BLOCK, payload, INPUT_SERIAL_LEN_FILTER_BLOCK);
+  uint8_t payload[INPUT_SERIAL_LEN_ADSR_BLOCK];
+  encode_u16_le(payload + 0, attack);
+  encode_u16_le(payload + 2, decay);
+  encode_u16_le(payload + 4, sustain);
+  encode_u16_le(payload + 6, release);
+  serial_frame_write(SCREEN_PORT, cmd, payload, INPUT_SERIAL_LEN_ADSR_BLOCK);
+#else
+  (void)cmd; (void)attack; (void)decay; (void)sustain; (void)release;
 #endif
+}
+
+static void input_handle_adsr1_from_dco(char, const uint8_t* payload, uint8_t len) {
+  if (len != INPUT_SERIAL_LEN_ADSR_BLOCK) return;
+  input_apply_adsr_block_from_dco(payload, ADSR1_attack, ADSR1_decay,
+                                  ADSR1_sustain, ADSR1_release);
+  input_forward_adsr_block_to_screen(INPUT_CMD_ADSR1_BLOCK, ADSR1_attack, ADSR1_decay,
+                                     ADSR1_sustain, ADSR1_release);
+}
+
+static void input_handle_adsr2_from_dco(char, const uint8_t* payload, uint8_t len) {
+  if (len != INPUT_SERIAL_LEN_ADSR_BLOCK) return;
+  input_apply_adsr_block_from_dco(payload, ADSR2_attack, ADSR2_decay,
+                                  ADSR2_sustain, ADSR2_release);
+  input_forward_adsr_block_to_screen(INPUT_CMD_ADSR2_BLOCK, ADSR2_attack, ADSR2_decay,
+                                     ADSR2_sustain, ADSR2_release);
+}
+
+// EnvDCO stays off the Screen: 'c' on that link is the save-name char select,
+// and the panel never sent ADSR3 there either. Locals only, so the faders pick
+// up from a host or preset edit.
+static void input_handle_adsr3_from_dco(char, const uint8_t* payload, uint8_t len) {
+  if (len != INPUT_SERIAL_LEN_ADSR_BLOCK) return;
+  input_apply_adsr_block_from_dco(payload, ADSR3_attack, ADSR3_decay,
+                                  ADSR3_sustain, ADSR3_release);
 }
 
 static const SerialCommandDef dcoLinkCommands[] = {
   { INPUT_CMD_PARAM_16, INPUT_SERIAL_LEN_PARAM_16, input_handle_param16_from_dco },
   { INPUT_CMD_PARAM_32, INPUT_SERIAL_LEN_PARAM_32, input_handle_param32_from_dco },
+  { INPUT_CMD_ADSR1_BLOCK, INPUT_SERIAL_LEN_ADSR_BLOCK, input_handle_adsr1_from_dco },
+  { INPUT_CMD_ADSR2_BLOCK, INPUT_SERIAL_LEN_ADSR_BLOCK, input_handle_adsr2_from_dco },
+  { INPUT_CMD_ADSR3_BLOCK, INPUT_SERIAL_LEN_ADSR_BLOCK, input_handle_adsr3_from_dco },
   { INPUT_CMD_FILTER_BLOCK, INPUT_SERIAL_LEN_FILTER_BLOCK, input_handle_filter_block_from_dco },
   { INPUT_CMD_PRESET_DIR_ENTRY, INPUT_SERIAL_LEN_PRESET_DIR_ENTRY, input_handle_preset_dir_entry },
   { INPUT_CMD_PRESET_LOADED,    INPUT_SERIAL_LEN_PRESET_LOADED,    input_handle_preset_loaded    },

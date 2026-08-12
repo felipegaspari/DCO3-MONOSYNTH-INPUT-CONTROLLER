@@ -21,10 +21,13 @@ hub: DCO ↔ Input → Screen.
   LE, `'p'` when `sendToAll`, the Screen-only `'w'`/`'y'`/`'s'`/`'c'`, and `'q'`
   as preset number + 16 chars (17 bytes).
 - **Inbound**: `serial_read_from_dco()` LUT-drains slim `'x'` (5 B), the
-  persistable `'p'` mirror (3 B), and the `'O'`/`'L'` preset directory frames.
-  Gap 154 is relayed on to the Screen as slim `'x'`; cal 155 is stored locally;
-  `'p'` writes in-RAM synth locals and forwards to Screen toasts without
-  re-transmitting to the DCO. See [`CONTROL_PIPELINE.md`](CONTROL_PIPELINE.md).
+  persistable `'p'` mirror (3 B), the `'a'`–`'d'` blocks and the `'O'`/`'L'`
+  preset directory frames. Gap 154 is relayed on to the Screen as slim `'x'`;
+  cal 155 is stored locally; `'p'` writes in-RAM synth locals and forwards to
+  Screen toasts; the blocks refresh the fader and pot locals (ADSR times
+  inverted back to fader units) and reach the Screen as `'a'`/`'b'` or as the
+  UI ids 191-194 for the filter. Nothing is re-transmitted to the DCO. See
+  [`CONTROL_PIPELINE.md`](CONTROL_PIPELINE.md).
 
 Preset directory sync (the DCO is the only preset store, see
 [`PRESETS.md`](PRESETS.md)): Input sends `'N'` with one unused byte, the DCO

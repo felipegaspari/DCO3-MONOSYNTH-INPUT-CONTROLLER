@@ -55,7 +55,7 @@ writes locals only and does not re-TX. Input has **no LittleFS**.
 
 **Core 0:** scan hardware (`readControls` → mux / encoders / buttons). Encoder/button handlers emit ParamIds, UI signals, preset ops.
 
-**Core 1:** map filtered ADC when manual flags set; TX slim LE `'a'`–`'d'` / `'p'` on `DCO_PORT`; LED refresh; parse inbound `'x'` / persistable `'p'` / `'d'` / `'O'` / `'L'` on `DCO_PORT` (`serial_read_from_dco`) and relay gap 154, persistable `'p'` and `'d'` to the Screen on `SCREEN_PORT`. `setup1()` issues the `'N'` directory request.
+**Core 1:** map filtered ADC when manual flags set; TX slim LE `'a'`–`'d'` / `'p'` on `DCO_PORT`; LED refresh; parse inbound `'x'` / persistable `'p'` / `'a'`–`'d'` / `'O'` / `'L'` on `DCO_PORT` (`serial_read_from_dco`) and relay gap 154 and persistable `'p'` verbatim to the Screen on `SCREEN_PORT`, plus `'a'`/`'b'` re-encoded in fader units and the filter fields as UI ids 191-194. `setup1()` issues the `'N'` directory request.
 
 ---
 
