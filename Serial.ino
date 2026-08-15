@@ -6,7 +6,7 @@ UartDmaTx ScreenDma = { 1 };
 
 // Forward declarations from presetStorage.ino
 void input_handle_preset_dir_entry(char cmd, const uint8_t* payload, uint8_t len);
-void input_handle_preset_loaded(char cmd, const uint8_t* payload, uint8_t len);
+void input_handle_preset_loaded(char, const uint8_t* payload, uint8_t);
 
 // =============================================================================
 // 1. DMA Initialization & Polling (RP2040)
@@ -441,4 +441,16 @@ void __not_in_flash_func(serial_read_from_dco)() {
     serial_parser_drain(dcoLinkParser, dcoLinkLut, DCO_RX_PORT, 255);
   }
 #endif
+}
+
+void input_disable_all_manual_controls() {
+  faderRow1ControlManual = false;
+  faderRow2ControlManual = false;
+  VCFPotsControlManual   = false;
+  VCAPotsControlManual   = false;
+  PWMPotsControlManual   = false;
+#ifdef ALL_CONTROLS_MANUAL
+  allControlsManual      = false;
+#endif
+  ledRefreshPending      = true; // Refresh button LEDs if applicable
 }

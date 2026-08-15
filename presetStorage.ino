@@ -1,64 +1,61 @@
 // Preset directory cache + board-driven save/load.
 //
-// The DCO's LittleFS preset store (pb00..pb63, 4 records each, slots 0..255)
-// is the single source of truth for the whole system; Input no longer has its
-// own LittleFS bank. Input just caches all 256 slot names in RAM (fetched once
-// at boot and again whenever the user enters preset select/save mode) and asks
-// the DCO to save/load/report the live slot. See DCO/preset_store.h and
-// DCO/docs/PRESET_STORE.md for the wire protocol ('N'/'O'/'L', 'q', and
-// PARAM_PRESET_SAVE/_LOAD).
+// The DCO's LittleFS preset store is the single source of truth for the whole
+// system; Input caches all 256 slot names in RAM (fetched once at boot and
+// again whenever entering preset select/save mode) and asks the DCO to
+// save/load/report the live slot.
 
 static constexpr uint16_t INPUT_PRESET_NUM_SLOTS = 256;
-
 static byte presetDir[INPUT_PRESET_NUM_SLOTS][16];
 
-// 'N': ask the DCO to (re)send the whole 256-slot directory. Call at boot and
-// whenever preset select/save mode is entered, to guard against staleness if
-// another peer (e.g. dco_control) renamed/saved a slot since boot.
+// 'N': ask the DCO to (re)send the whole 256-slot directory.
 void request_preset_directory() {
   uint8_t pad = 0;
-  serial_frame_write(DcoDma, CMD_PRESET_DIR_REQUEST, &pad, SERIAL_LEN_PRESET_DIR_REQUEST);
+  serial_frame_write(DcoDma, CMD_PRESET_DIR_REQUEST, &pad,
+                     SERIAL_LEN_PRESET_DIR_REQUEST);
 }
 
-// 'O': one directory entry pushed by the DCO. [slot:u8][name:16 ASCII].
+// 'O': one directory entry pushed by the DCO [slot:u8][name:16 ASCII].
 // Registered in Serial.ino's dcoLinkCommands[], hence not static.
-void input_handle_preset_dir_entry(char, const uint8_t* payload, uint8_t) {
+void input_handle_preset_dir_entry(char, const uint8_t *payload, uint8_t) {
   uint8_t slot = payload[0];
   if (slot < INPUT_PRESET_NUM_SLOTS) {
-    for (int i = 0; i < 16; i++) {
-      presetDir[slot][i] = payload[1 + i];
-    }
+    memcpy(presetDir[slot], payload + 1, 16);
   }
 }
 
-// 'L': the DCO just finished loading a slot (boot recall, MIDI PC,
-// USB/dco_control, or an Input-triggered load). Keep the Screen's preset
-// display in sync even for loads Input didn't itself trigger.
-// Registered in Serial.ino's dcoLinkCommands[], hence not static.
-void input_handle_preset_loaded(char, const uint8_t* payload, uint8_t) {
+// 'L': DCO confirms a preset finished loading (Boot recall, MIDI PC, USB, or
+// Panel). Central place where the panel syncs its name cache, turns off manual
+// controls, and updates the Screen. Registered in Serial.ino's
+// dcoLinkCommands[], hence not static.
+void input_handle_preset_loaded(char, const uint8_t *payload, uint8_t) {
+  // Turn off manual controls so physical pots/faders don't overwrite the loaded
+  // preset!
+  input_disable_all_manual_controls();
   const uint8_t slot = payload[0];
-  if (slot >= INPUT_PRESET_NUM_SLOTS) return;
+  if (slot >= INPUT_PRESET_NUM_SLOTS)
+    return;
 
   currentPreset = slot;
   presetSelectVal = currentPreset;
   memcpy(presetName, presetDir[slot], 16);
-  presetNameString = String((char*)presetName);
+  presetNameString = String((char *)presetName);
   ledRefreshPending = true;
 
-  // No signal here: the DCO brackets its own recall mirror with Silent/PresetScroll
-  // (preset_store.ino), and this frame travels the independent Screen link, so
-  // sending it would race ahead of the mirror and lift the silence early.
+  // No signal here: the DCO brackets its own recall mirror with
+  // Silent/PresetScroll, and sending it here would race ahead of the mirror and
+  // lift the silence early.
   serial_send_preset_scroll(currentPreset, presetName);
 }
 
-// Copy preset name bytes into caller array (from the local RAM cache; no
-// LittleFS / round trip).
+// Copy preset name bytes into caller array from the local RAM cache.
 void get_preset_name(byte presetN, byte (&myarray)[16]) {
-  if (presetN >= INPUT_PRESET_NUM_SLOTS) return;
+  if (presetN >= INPUT_PRESET_NUM_SLOTS)
+    return;
   memcpy(myarray, presetDir[presetN], 16);
 }
 
-// Debug helper: dump the cached directory to USB Serial (if enabled).
+// Debug helper: dump cached directory to USB Serial.
 void dumpPresetBankToSerial() {
 #ifdef ENABLE_SERIAL
   Serial.println(F("=== Preset directory cache (from DCO) ==="));
@@ -68,7 +65,8 @@ void dumpPresetBankToSerial() {
     Serial.print(F("  name=\""));
     for (uint8_t i = 0; i < 16; ++i) {
       char c = (char)presetDir[p][i];
-      if (c < 32) c = ' ';
+      if (c < 32)
+        c = ' ';
       Serial.print(c);
     }
     Serial.println(F("\""));
@@ -77,87 +75,59 @@ void dumpPresetBankToSerial() {
 #endif
 }
 
-// PARAM_PRESET_SAVE (170): tell the DCO to snapshot its current live state
-// into slot, under the name just edited in presetNameVal. The DCO builds and
-// writes the record itself; Input only needs to keep its own name cache and
-// UI state consistent with what it just asked for (no re-fetch needed).
+// PARAM_PRESET_SAVE (170): Snapshot live state into slot under presetNameVal.
 void preset_save_to_board(uint16_t slot) {
-  if (slot >= INPUT_PRESET_NUM_SLOTS) return;
+  if (slot >= INPUT_PRESET_NUM_SLOTS)
+    return;
 
-  // Session UI flags — cleared locally, not stored as patch sound.
-  faderRow1ControlManual = false;
-  faderRow2ControlManual = false;
-  VCFPotsControlManual = false;
-  VCAPotsControlManual = false;
-  PWMPotsControlManual = false;
+  input_disable_all_manual_controls();
 
   serial_send_preset_name_to_mainboard();
   serial_send_param_change_byte(ParamId::PARAM_PRESET_SAVE, (byte)slot, false);
 
   memcpy(presetDir[slot], presetNameVal, 16);
+  memcpy(presetName, presetNameVal, 16);
 
   saveFlow = SaveFlow::IDLE;
-
   currentPreset = slot;
   presetSelectVal = currentPreset;
-  memcpy(presetName, presetNameVal, 16);
 
   set_LED_Status(LED_REFRESH_ALL, 0);
 }
 
-// PARAM_PRESET_LOAD (171): tell the DCO to recall slot. The DCO applies the
-// record itself and mirrors persistable params/blocks back over the existing
-// 'p'/'a'-'d' path with no Input-side unpack needed. Update the Screen
-// optimistically here (the DCO's own 'L' notice will confirm/repeat this for
-// loads triggered by boot/MIDI/USB instead of Input).
+// PARAM_PRESET_LOAD (171): Request DCO to recall slot.
 void preset_load_from_board(uint16_t slot) {
-  if (slot >= INPUT_PRESET_NUM_SLOTS) return;
+  if (slot >= INPUT_PRESET_NUM_SLOTS)
+    return;
 
-  // Session UI flags — not part of the patch sound.
-  faderRow1ControlManual = false;
-  faderRow2ControlManual = false;
-  VCFPotsControlManual = false;
-  VCAPotsControlManual = false;
-  PWMPotsControlManual = false;
+  input_disable_all_manual_controls();
 
+  // Ask DCO to load the preset
   serial_send_param_change_byte(ParamId::PARAM_PRESET_LOAD, (byte)slot, false);
 
   currentPreset = slot;
   presetSelectVal = currentPreset;
   memcpy(presetName, presetDir[slot], 16);
-  presetNameString = String((char*)presetName);
+  presetNameString = String((char *)presetName);
   ledRefreshPending = true;
 
-  // Optimistic, and deliberately ahead of the DCO: this lands before the DCO's
-  // own Silent marker, so it cannot cut the recall silence short.
+  // Optimistic Screen update ahead of the DCO
   serial_send_preset_scroll(currentPreset, presetName);
   serial_send_signal(SIGNAL_PRESET_LOAD_SCROLL);
 }
 
-// Post-save UI/state cleanup (clear session manual flags, refresh LEDs).
+// Post-save UI/state cleanup
 void writePresetActions(uint16_t presetN) {
-  faderRow1ControlManual = false;
-  faderRow2ControlManual = false;
-  VCFPotsControlManual = false;
-  PWMPotsControlManual = false;
-  VCAPotsControlManual = false;
-
+  input_disable_all_manual_controls();
   saveFlow = SaveFlow::IDLE;
-
   currentPreset = presetN;
   presetSelectVal = currentPreset;
-
   set_LED_Status(LED_REFRESH_ALL, 0);
 }
 
-// Post-load UI/state cleanup (session flags only; does not alter patch).
+// Post-load UI/state cleanup
 void loadPresetActions(uint16_t presetN) {
-  faderRow1ControlManual = false;
-  faderRow2ControlManual = false;
-  VCFPotsControlManual = false;
-  VCAPotsControlManual = false;
-  PWMPotsControlManual = false;
-
+  input_disable_all_manual_controls();
   currentPreset = presetN;
   presetSelectVal = currentPreset;
 }
