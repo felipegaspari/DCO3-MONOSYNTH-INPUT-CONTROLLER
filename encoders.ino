@@ -1,55 +1,6 @@
 #include "include_all.h"
 #include "_build_libs/MD_REncoder_fela/src/MD_REncoder_fela.cpp"
 
-
-// --- ENCODER SERIAL THROTTLE CONFIGURATION ----------------------------------
-EncoderThrottle encThrottle[NUM_ENCODERS];
-
-void queue_encoder_param_send(uint8_t encIndex, ParamId paramId, uint16_t wireValue, bool isWord) {
-  if (encIndex >= NUM_ENCODERS) return;
-
-  uint32_t now = millis();
-  EncoderThrottle &t = encThrottle[encIndex];
-
-  t.paramId = paramId;
-  t.wireValue = wireValue;
-  t.isWord = isWord;
-
-  // If enough time has passed since the last send, transmit immediately:
-  if (now - t.lastSentMillis >= ENCODER_TX_INTERVAL_MS) {
-    if (t.isWord) {
-      serial_send_param_change((byte)t.paramId, t.wireValue);
-    } else {
-      serial_send_param_change_byte((byte)t.paramId, (byte)t.wireValue);
-    }
-    t.lastSentMillis = now;
-    t.isDirty = false;
-  } else {
-    // Too fast: mark dirty, will be transmitted by flush_encoder_throttle()
-    t.isDirty = true;
-  }
-}
-
-void flush_encoder_throttle() {
-  uint32_t now = millis();
-
-  for (uint8_t i = 0; i < NUM_ENCODERS; i++) {
-    EncoderThrottle &t = encThrottle[i];
-
-    // If dirty and cooldown interval has passed, send the latest settled value
-    if (t.isDirty && (now - t.lastSentMillis >= ENCODER_TX_INTERVAL_MS)) {
-      if (t.isWord) {
-        serial_send_param_change((byte)t.paramId, t.wireValue);
-      } else {
-        serial_send_param_change_byte((byte)t.paramId, (byte)t.wireValue);
-      }
-      t.lastSentMillis = now;
-      t.isDirty = false;
-    }
-  }
-}
-// --- END ENCODER SERIAL THROTTLE CONFIGURATION ------------------------------
-
 // -----------------------------------------------------------------------------
 // Value-knob bindings, one row per plain parameter action. Executed by
 // encoder_apply_binding(); see EncoderParamBinding in encoders.h for the
@@ -106,10 +57,8 @@ static inline void encoder_binding_write(const EncoderParamBinding& b, int32_t v
   }
 }
 
-// Run the table-bound handler for action, if it has a binding. Edits only when
-// the knob is already "selected" (first detent just shows the value), then
-// queues the param for throttled transmission so the Screen and DCO stay in sync.
-static bool __not_in_flash_func(encoder_apply_binding)(uint8_t encIndex, EncoderAction action, uint8_t direction, uint16_t speed) {
+// Run the table-bound handler for action.
+static bool __not_in_flash_func(encoder_apply_binding)(EncoderAction action, uint8_t direction, uint16_t speed) {
   for (uint8_t n = 0; n < NUM_ENCODER_BINDINGS; n++) {
     const EncoderParamBinding& b = encoderParamBindings[n];
     if (b.action != action) continue;
@@ -124,17 +73,17 @@ static bool __not_in_flash_func(encoder_apply_binding)(uint8_t encIndex, Encoder
 
     int32_t out = encoder_binding_read(b);
     if (b.flags & ENC_SEND_OFFSET_512) out += 512;
-    bool isWord = (b.flags & ENC_SEND_WORD) != 0;
-
-    // Throttle transmission to avoid saturating UART / Screen / DCO RX FIFO
-    queue_encoder_param_send(encIndex, b.paramId, (uint16_t)out, isWord);
+    if (b.flags & ENC_SEND_WORD) {
+      serial_send_param_change((byte)b.paramId, (uint16_t)out);
+    } else {
+      serial_send_param_change_byte((byte)b.paramId, (uint8_t)out);
+    }
     return true;
   }
   return false;
 }
 
-// Map a detent on encoder i to an action for the current control mode. In
-// NORMAL mode this also runs the first-detent selection tracking.
+// Map a detent on encoder i to an action for the current control mode.
 static EncoderAction __not_in_flash_func(resolve_encoder_action)(const EncoderStruct& encoder, int i) {
   switch (currentControlMode) {
     case NORMAL: {
@@ -180,16 +129,19 @@ void __not_in_flash_func(read_encoders)() {
 
     EncoderStruct& encoder = encoders[i];
 
-    uint8_t direction = encoder.MD_REncoder_Name.read(valorMUX1[encoder.muxPin1], valorMUX1[encoder.muxPin2]);
-    if (!direction) {
+    // Read throttled delta directly from library (max 1 event every 20ms)
+    int16_t delta = encoder.MD_REncoder_Name.readDelta(valorMUX1[encoder.muxPin1], valorMUX1[encoder.muxPin2], 20);
+    if (delta == 0) {
       continue;
     }
+
+    uint8_t direction = (delta > 0) ? DIR_CW : DIR_CCW;
     uint16_t speed = encoder.MD_REncoder_Name.speed();
 
     EncoderAction currentAction = resolve_encoder_action(encoder, i);
 
-    // Plain value knobs are table-driven (throttled inside encoder_apply_binding)
-    if (encoder_apply_binding(i, currentAction, direction, speed)) {
+    // Plain value knobs are table-driven
+    if (encoder_apply_binding(currentAction, direction, speed)) {
       continue;
     }
 
@@ -203,10 +155,10 @@ void __not_in_flash_func(read_encoders)() {
           }
           if (ADSR1CurveSelect == true) {
             ADSR1AttackCurveVal = constrain(ADSR1AttackCurveVal + a, 0, 7);
-            queue_encoder_param_send(i, ParamId::PARAM_ADSR1_ATTACK_CURVE, (uint8_t)ADSR1AttackCurveVal, false);
+            serial_send_param_change_byte(ParamId::PARAM_ADSR1_ATTACK_CURVE, (uint8_t)ADSR1AttackCurveVal);
           } else if (ADSR2CurveSelect == true) {
             ADSR2AttackCurveVal = constrain(ADSR2AttackCurveVal + a, 0, 7);
-            queue_encoder_param_send(i, ParamId::PARAM_ADSR2_ATTACK_CURVE, (uint8_t)ADSR2AttackCurveVal, false);
+            serial_send_param_change_byte(ParamId::PARAM_ADSR2_ATTACK_CURVE, (uint8_t)ADSR2AttackCurveVal);
           }
           break;
         }
@@ -218,10 +170,10 @@ void __not_in_flash_func(read_encoders)() {
           }
           if (ADSR1CurveSelect == true) {
             ADSR1DecayCurveVal = constrain(ADSR1DecayCurveVal + a, 0, 7);
-            queue_encoder_param_send(i, ParamId::PARAM_ADSR1_DECAY_CURVE, (uint8_t)ADSR1DecayCurveVal, false);
+            serial_send_param_change_byte(ParamId::PARAM_ADSR1_DECAY_CURVE, (uint8_t)ADSR1DecayCurveVal);
           } else if (ADSR2CurveSelect == true) {
             ADSR2DecayCurveVal = constrain(ADSR2DecayCurveVal + a, 0, 7);
-            queue_encoder_param_send(i, ParamId::PARAM_ADSR2_DECAY_CURVE, (uint8_t)ADSR2DecayCurveVal, false);
+            serial_send_param_change_byte(ParamId::PARAM_ADSR2_DECAY_CURVE, (uint8_t)ADSR2DecayCurveVal);
           }
           break;
         }
@@ -234,7 +186,6 @@ void __not_in_flash_func(read_encoders)() {
         }
         presetSelectVal = constrain(presetSelectVal, 0, 255);
         if (saveFlow != SaveFlow::IDLE) {
-          // Update screen with selected preset name (16 chars)
           byte presetNameScroll[16];
           get_preset_name(presetSelectVal, presetNameScroll);
           serial_send_preset_scroll((uint8_t)presetSelectVal, presetNameScroll);
@@ -293,7 +244,8 @@ void __not_in_flash_func(read_encoders)() {
             }
             amp = constrain(amp, AMP_COMP_440_MIN, AMP_COMP_440_MAX);
             manualAmpComp440[index] = (uint16_t)amp;
-            queue_encoder_param_send(i, ParamId::PARAM_AMP_COMP_440, (uint16_t)amp, true);
+            serial_send_param_change(ParamId::PARAM_AMP_COMP_440,
+                                     (uint16_t)amp, /*sendToAll=*/true);
           } else if (INPUT_CAL_STAGE_IS_PW_EDIT((uint8_t)manualCalibrationStage)) {
             uint8_t ch = INPUT_CAL_PW_CH(index);
             if (ch >= NUM_VOICES) ch = NUM_VOICES - 1;
@@ -305,7 +257,8 @@ void __not_in_flash_func(read_encoders)() {
             }
             pw = constrain(pw, 0, CAL_PW_CENTER_MAX);
             manualPwCenter[ch] = (uint16_t)pw;
-            queue_encoder_param_send(i, ParamId::PARAM_CAL_PW_CENTER, (uint16_t)pw, true);
+            serial_send_param_change(ParamId::PARAM_CAL_PW_CENTER,
+                                     (uint16_t)pw, /*sendToAll=*/true);
           } else {
             if (direction == DIR_CW) {
               manualCalibrationInitAmpCompOffset[index] = manualCalibrationInitAmpCompOffset[index] + 1;
@@ -329,14 +282,11 @@ void __not_in_flash_func(read_encoders)() {
           menuPos = menuPos - 1;
         }
         menuPos = constrain(menuPos, 0, menuPosMax);
-        queue_encoder_param_send(i, ParamId::PARAM_UI_MENU_POSITION, (uint8_t)menuPos, false);
+        serial_send_param_change_byte(ParamId::PARAM_UI_MENU_POSITION, (uint8_t)menuPos);
         break;
 
       default:
         break;
     }
   }
-
-  // Flush any pending throttled encoder transmissions whose timer elapsed
-  flush_encoder_throttle();
 }
