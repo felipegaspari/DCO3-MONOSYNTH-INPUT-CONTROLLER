@@ -22,20 +22,29 @@ void request_preset_directory() {
 
 // 'O': one directory entry pushed by the DCO. [slot:u8][name:16 ASCII].
 // Registered in Serial.ino's dcoLinkCommands[], hence not static.
-void input_handle_preset_dir_entry(char, const uint8_t* payload, uint8_t) {
+void input_handle_preset_dir_entry(char, const uint8_t* payload, uint8_t len) {
+  // Update slot name cache in RAM
   uint8_t slot = payload[0];
-  if (slot < INPUT_PRESET_NUM_SLOTS) {
+  if (slot < 256) {
     for (int i = 0; i < 16; i++) {
-      presetDir[slot][i] = payload[1 + i];
+      presetNamesCache[slot][i] = payload[1 + i];
     }
   }
 }
+
+void input_handle_preset_loaded(char, const uint8_t* payload, uint8_t len) {
+  currentPreset = payload[0];
+  serial_send_preset_scroll(currentPreset, presetName);
+  serial_send_signal(SIGNAL_PRESET_LOAD_SCROLL);
+}
+
 
 // 'L': the DCO just finished loading a slot (boot recall, MIDI PC,
 // USB/dco_control, or an Input-triggered load). Keep the Screen's preset
 // display in sync even for loads Input didn't itself trigger.
 // Registered in Serial.ino's dcoLinkCommands[], hence not static.
-void input_handle_preset_loaded(char, const uint8_t* payload, uint8_t) {
+void input_handle_preset_loaded(char, const uint8_t* payload, uint8_t len) {
+  if (len != INPUT_SERIAL_LEN_PRESET_LOADED) return;
   const uint8_t slot = payload[0];
   if (slot >= INPUT_PRESET_NUM_SLOTS) return;
 
@@ -136,6 +145,7 @@ void preset_load_from_board(uint16_t slot) {
 
 // Post-save UI/state cleanup (clear session manual flags, refresh LEDs).
 void writePresetActions(uint16_t presetN) {
+
   faderRow1ControlManual = false;
   faderRow2ControlManual = false;
   VCFPotsControlManual = false;
@@ -152,6 +162,7 @@ void writePresetActions(uint16_t presetN) {
 
 // Post-load UI/state cleanup (session flags only; does not alter patch).
 void loadPresetActions(uint16_t presetN) {
+
   faderRow1ControlManual = false;
   faderRow2ControlManual = false;
   VCFPotsControlManual = false;

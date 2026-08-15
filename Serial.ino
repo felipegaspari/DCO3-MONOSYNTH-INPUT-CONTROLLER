@@ -1,182 +1,245 @@
-// Screen UI mode signal ('s' + byte).
-void __not_in_flash_func(serial_send_signal)(byte signal) {
-#ifdef ENABLE_SCREEN_LINK
-  serial_frame_write(ScreenDma, (uint8_t)'s', &signal, 1);
+#define DCO_PROTOCOL_IMPLEMENT_DMA
+#include "include_all.h"
+
+UartDmaTx DcoDma    = { 0 };
+UartDmaTx ScreenDma = { 1 };
+
+// Forward declarations from presetStorage.ino
+void input_handle_preset_dir_entry(char cmd, const uint8_t* payload, uint8_t len);
+void input_handle_preset_loaded(char cmd, const uint8_t* payload, uint8_t len);
+
+// =============================================================================
+// 1. DMA Initialization & Polling (RP2040)
+// =============================================================================
+
+void serial_dma_init() {
+#if INPUT_IS_DCO3
+  serial_dma_init_rp2040(0, uart0);
+  serial_dma_init_rp2040(1, uart1);
+#else
+  serial_dma_init_rp2040(0, uart1);
+  serial_dma_init_rp2040(1, uart0);
 #endif
 }
 
-// Send slim 'p' (id + i16 LE) to the DCO, and to the Screen when sendToAll.
+void serial_dma_poll() {
+  serial_dma_poll_one(0);
+  serial_dma_poll_one(1);
+}
+
+// =============================================================================
+// 2. Outgoing Senders (Panel -> DCO / Mainboard / Screen)
+// =============================================================================
+
+static inline INPUT_ALWAYS_INLINE void pack_u16_le4(uint8_t* dst, uint16_t a, uint16_t b, uint16_t c, uint16_t d) {
+  encode_u16_le(dst + 0, a);
+  encode_u16_le(dst + 2, b);
+  encode_u16_le(dst + 4, c);
+  encode_u16_le(dst + 6, d);
+}
+
+void __not_in_flash_func(serial_send_signal)(byte signal) {
+#ifdef ENABLE_SCREEN_LINK
+  serial_frame_write(ScreenDma, CMD_SCREEN_SIGNAL, &signal, SERIAL_LEN_SCREEN_SIGNAL);
+#endif
+}
+
 void __not_in_flash_func(serial_send_param_change)(byte param, uint16_t paramValue, bool sendToAll) {
-  uint8_t payload[INPUT_SERIAL_LEN_PARAM_16];
+  uint8_t payload[SERIAL_LEN_PARAM_16];
   encode_param_p(payload, param, (int16_t)paramValue);
+
 #ifdef ENABLE_SCREEN_LINK
   if (sendToAll) {
-    serial_frame_write(ScreenDma, INPUT_CMD_PARAM_16, payload, INPUT_SERIAL_LEN_PARAM_16);
+    serial_frame_write(ScreenDma, CMD_PARAM_16, payload, SERIAL_LEN_PARAM_16);
   }
 #endif
 #ifdef ENABLE_DCO_LINK
   if (paramValue != (uint16_t)-1) {
-    serial_frame_write(DcoDma, INPUT_CMD_PARAM_16, payload, INPUT_SERIAL_LEN_PARAM_16);
+    serial_frame_write(DcoDma, CMD_PARAM_16, payload, SERIAL_LEN_PARAM_16);
   }
 #endif
 }
 
-// Screen keeps slim 'w' [id][u8]; DCO gets 'p' (i16 zero-extended). 255 = screen-only.
 void __not_in_flash_func(serial_send_param_change_byte)(byte param, byte paramValue, bool sendToAll) {
-#ifdef ENABLE_SCREEN_LINK
-  if (sendToAll) {
-    uint8_t w[SERIAL_LEN_PARAM_8];
-    encode_param_w(w, param, paramValue);
-    serial_frame_write(ScreenDma, (uint8_t)'w', w, SERIAL_LEN_PARAM_8);
-  }
-#endif
-#ifdef ENABLE_DCO_LINK
-  if (paramValue != (byte)-1) {
-    uint8_t p[INPUT_SERIAL_LEN_PARAM_16];
-    encode_param_p(p, param, (int16_t)paramValue);
-    serial_frame_write(DcoDma, INPUT_CMD_PARAM_16, p, INPUT_SERIAL_LEN_PARAM_16);
-  }
-#endif
+  serial_send_param_change(param, (uint16_t)paramValue, sendToAll);
 }
 
-// Send preset name (16 chars) to the DCO via 'q'.
 void serial_send_preset_name_to_mainboard() {
 #ifdef ENABLE_DCO_LINK
-  serial_frame_write(DcoDma, INPUT_CMD_PRESET_NAME, presetNameVal, INPUT_SERIAL_LEN_PRESET_NAME);
+  serial_frame_write(DcoDma, CMD_PRESET_NAME, presetNameVal, SERIAL_LEN_PRESET_NAME);
 #endif
 }
 
-// Send preset scroll (number + 16-char name) to the Screen via 'q'.
 void serial_send_preset_scroll(byte presetNumber, byte presetNameSerial[]) {
 #ifdef ENABLE_SCREEN_LINK
-  uint8_t payload[17];
+  uint8_t payload[SERIAL_LEN_SCREEN_PRESET_SCROLL];
   payload[0] = presetNumber;
   for (uint8_t i = 0; i < 16; ++i) {
     payload[1 + i] = presetNameSerial[i];
   }
-  serial_frame_write(ScreenDma, (uint8_t)'q', payload, 17);
+  serial_frame_write(ScreenDma, CMD_PRESET_NAME, payload, SERIAL_LEN_SCREEN_PRESET_SCROLL);
 #endif
 }
 
-// Send save-name character position to the Screen via 'c'.
 void serial_send_save_char_select(byte serialPresetChar) {
 #ifdef ENABLE_SCREEN_LINK
-  serial_frame_write(ScreenDma, (uint8_t)'c', &serialPresetChar, 1);
+  serial_frame_write(ScreenDma, CMD_CHAR_SELECT, &serialPresetChar, SERIAL_LEN_CHAR_SELECT);
 #endif
 }
 
-// Send 'y' byte param to the Screen.
-void __not_in_flash_func(serialSendParamByteToScreen)(byte paramNumber, byte paramValue)
-{
-#ifdef ENABLE_SCREEN_LINK
-  uint8_t payload[2] = { paramNumber, paramValue };
-  serial_frame_write(ScreenDma, (uint8_t)'y', payload, 2);
-#endif
-}
-
-// Screen-only 'p'. Stage-enter must not push OFFSET/159/162 to the DCO: its
-// LittleFS values are the source of truth, and Input's cache boots at 0.
 static void input_send_param16_to_screen(uint8_t id, int16_t value) {
 #ifdef ENABLE_SCREEN_LINK
-  uint8_t payload[INPUT_SERIAL_LEN_PARAM_16];
+  uint8_t payload[SERIAL_LEN_PARAM_16];
   encode_param_p(payload, id, value);
-  serial_frame_write(ScreenDma, INPUT_CMD_PARAM_16, payload, INPUT_SERIAL_LEN_PARAM_16);
+  serial_frame_write(ScreenDma, CMD_PARAM_16, payload, SERIAL_LEN_PARAM_16);
 #else
   (void)id;
   (void)value;
 #endif
 }
 
-// Push the current manual-cal stage to DCO + Screen. Offset / amp / PW go to
-// Screen from cache only; DCO echoes stored 159/162 on 440 / pw_edit stages
-// and packed 155 offsets on FLAG, which prime the encoder cache.
+void __not_in_flash_func(serialSendParamByteToScreen)(byte paramNumber, byte paramValue) {
+  input_send_param16_to_screen(paramNumber, (int16_t)(int8_t)paramValue);
+}
+
 void input_send_manual_cal_stage() {
   const uint8_t stage = (uint8_t)manualCalibrationStage;
   const uint8_t osc   = INPUT_CAL_STAGE_TO_OSC(stage);
-  serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_STAGE,
-                                stage, /*sendToAll=*/false);
+  serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_STAGE, stage, /*sendToAll=*/false);
   serialSendParamByteToScreen(ParamId::PARAM_MANUAL_CALIBRATION_STAGE, stage);
   if (INPUT_CAL_STAGE_IS_440(stage)) {
     if (manualAmpComp440[osc] != 0) {
-      input_send_param16_to_screen(ParamId::PARAM_AMP_COMP_440,
-                                   (int16_t)manualAmpComp440[osc]);
+      input_send_param16_to_screen(ParamId::PARAM_AMP_COMP_440, (int16_t)manualAmpComp440[osc]);
     }
   } else if (INPUT_CAL_STAGE_IS_PW_EDIT(stage)) {
     uint8_t ch = INPUT_CAL_PW_CH(osc);
     if (ch >= NUM_VOICES) ch = NUM_VOICES - 1;
     if (manualPwCenter[ch] != 0) {
-      input_send_param16_to_screen(ParamId::PARAM_CAL_PW_CENTER,
-                                   (int16_t)manualPwCenter[ch]);
+      input_send_param16_to_screen(ParamId::PARAM_CAL_PW_CENTER, (int16_t)manualPwCenter[ch]);
     }
   } else {
-    serialSendParamByteToScreen(ParamId::PARAM_MANUAL_CALIBRATION_OFFSET,
-                                (uint8_t)manualCalibrationInitAmpCompOffset[osc]);
+    serialSendParamByteToScreen(ParamId::PARAM_MANUAL_CALIBRATION_OFFSET, (uint8_t)manualCalibrationInitAmpCompOffset[osc]);
   }
 }
 
-// ---------------------------------------------------------------------------
-// Parser-based receiver for Mainboard/DCO slim frames on DCO_RX_PORT
-// (DCO4: Serial1 GP1 <- Mainboard PE1; DCO3: Serial1 GP1 <- DCO GP20).
-//
-// One rule decides who mirrors the DCO to the Screen: whoever is one hop away.
-// On DCO3 that is this board, because the Screen has no other link. On DCO4 the
-// Mainboard drives the Screen's USART1 itself, so relaying a DCO-origin frame on
-// from here would deliver it twice — and the second copy would land after the
-// end-of-silence marker that closes a preset recall, dropping a parameter toast
-// back on top of the preset name. Hence INPUT_RELAYS_DCO_TO_SCREEN below; this
-// link still carries everything panel-origin on both models.
-// ---------------------------------------------------------------------------
+// Full 1ms live stream to DCO/Mainboard; screen updates on change only to protect display FPS
+void __not_in_flash_func(serial_send_manual_controls)(bool presetLoading) {
+  // 1. ADSR 1 Faders
+  if (faderRow1ControlManual || presetLoading) {
+    uint8_t dataArrayDCO[SERIAL_LEN_ADSR_BLOCK];
+    pack_u16_le4(dataArrayDCO, linToExpLookup[ADSR1_attack], linToExpLookup[ADSR1_decay], ADSR1_sustain, linToExpLookup[ADSR1_release]);
+
+#ifdef ENABLE_DCO_LINK
+    serial_frame_write(DcoDma, CMD_ADSR1_BLOCK, dataArrayDCO, SERIAL_LEN_ADSR_BLOCK);
+#endif
+
+#ifdef ENABLE_SCREEN_LINK
+    static uint16_t scr_a1_a = 0xFFFF, scr_a1_d = 0xFFFF, scr_a1_s = 0xFFFF, scr_a1_r = 0xFFFF;
+    if (presetLoading || ADSR1_attack != scr_a1_a || ADSR1_decay != scr_a1_d || 
+        ADSR1_sustain != scr_a1_s || ADSR1_release != scr_a1_r) {
+      scr_a1_a = ADSR1_attack; scr_a1_d = ADSR1_decay;
+      scr_a1_s = ADSR1_sustain; scr_a1_r = ADSR1_release;
+
+      uint8_t dataArrayScreen[SERIAL_LEN_ADSR_BLOCK];
+      pack_u16_le4(dataArrayScreen, ADSR1_attack, ADSR1_decay, ADSR1_sustain, ADSR1_release);
+      serial_frame_write(ScreenDma, CMD_ADSR1_BLOCK, dataArrayScreen, SERIAL_LEN_ADSR_BLOCK);
+    }
+#endif
+  }
+
+  // 2. ADSR 2 / 3 Faders
+  if ((faderRow2ControlManual && !ADSR3Enabled) || presetLoading) {
+    uint8_t dataArrayDCO[SERIAL_LEN_ADSR_BLOCK];
+    pack_u16_le4(dataArrayDCO, linToExpLookup[ADSR2_attack], linToExpLookup[ADSR2_decay], ADSR2_sustain, linToExpLookup[ADSR2_release]);
+
+#ifdef ENABLE_DCO_LINK
+    serial_frame_write(DcoDma, CMD_ADSR2_BLOCK, dataArrayDCO, SERIAL_LEN_ADSR_BLOCK);
+#endif
+
+#ifdef ENABLE_SCREEN_LINK
+    static uint16_t scr_a2_a = 0xFFFF, scr_a2_d = 0xFFFF, scr_a2_s = 0xFFFF, scr_a2_r = 0xFFFF;
+    if (presetLoading || ADSR2_attack != scr_a2_a || ADSR2_decay != scr_a2_d || 
+        ADSR2_sustain != scr_a2_s || ADSR2_release != scr_a2_r) {
+      scr_a2_a = ADSR2_attack; scr_a2_d = ADSR2_decay;
+      scr_a2_s = ADSR2_sustain; scr_a2_r = ADSR2_release;
+
+      uint8_t dataArrayScreen[SERIAL_LEN_ADSR_BLOCK];
+      pack_u16_le4(dataArrayScreen, ADSR2_attack, ADSR2_decay, ADSR2_sustain, ADSR2_release);
+      serial_frame_write(ScreenDma, CMD_ADSR2_BLOCK, dataArrayScreen, SERIAL_LEN_ADSR_BLOCK);
+    }
+#endif
+  } else if ((faderRow2ControlManual && ADSR3Enabled) || presetLoading) {
+    uint8_t dataArray[SERIAL_LEN_ADSR_BLOCK];
+    pack_u16_le4(dataArray, linToExpLookup[ADSR3_attack], linToExpLookup[ADSR3_decay], ADSR3_sustain, linToExpLookup[ADSR3_release]);
+#ifdef ENABLE_DCO_LINK
+    serial_frame_write(DcoDma, CMD_ADSR3_BLOCK, dataArray, SERIAL_LEN_ADSR_BLOCK);
+#endif
+  }
+
+  // 3. VCF Filter Pots
+  if (VCFPotsControlManual || presetLoading) {
+    uint8_t dataArray[SERIAL_LEN_FILTER_BLOCK];
+    pack_u16_le4(dataArray, CUTOFF, RESONANCE, (uint16_t)ADSR2toVCF, LFO2toVCF);
+#ifdef ENABLE_DCO_LINK
+    serial_frame_write(DcoDma, CMD_FILTER_BLOCK, dataArray, SERIAL_LEN_FILTER_BLOCK);
+#endif
+  }
+
+  // 4. VCA Pots
+  if (VCAPotsControlManual || presetLoading) {
+#ifdef ENABLE_DCO_LINK
+    uint8_t p[SERIAL_LEN_PARAM_16];
+    encode_param_p(p, (uint8_t)ParamId::PARAM_ADSR1_TO_VCA, (int16_t)ADSR1toVCA);
+    serial_frame_write(DcoDma, CMD_PARAM_16, p, SERIAL_LEN_PARAM_16);
+#endif
+  }
+
+  // 5. PWM Pots
+  if (PWMPotsControlManual || presetLoading) {
+#ifdef ENABLE_DCO_LINK
+    uint8_t p[SERIAL_LEN_PARAM_16];
+    encode_param_p(p, (uint8_t)ParamId::PARAM_PW_VALUE, (int16_t)PW);
+    serial_frame_write(DcoDma, CMD_PARAM_16, p, SERIAL_LEN_PARAM_16);
+#endif
+  }
+}
+
+void sendSerial() {}
+
+// =============================================================================
+// 3. Ingress Handlers (DCO / Mainboard -> Input Controller)
+// =============================================================================
 
 #define INPUT_RELAYS_DCO_TO_SCREEN INPUT_IS_DCO3
 
 static void __not_in_flash_func(serial_forward_param32_to_screen)(const uint8_t* payload, uint8_t len) {
 #if defined(ENABLE_SCREEN_LINK) && INPUT_RELAYS_DCO_TO_SCREEN
-  if (len != INPUT_SERIAL_LEN_PARAM_32) {
-    return;
-  }
-  serial_frame_write(ScreenDma, INPUT_CMD_PARAM_32, payload, len);
+  serial_frame_write(ScreenDma, CMD_PARAM_32, payload, len);
 #else
   (void)payload;
   (void)len;
 #endif
 }
 
-// Relay persistable DCO→Input 'p' mirror to Screen toasts (wire i16, not locals).
 static void serial_forward_param16_to_screen(const uint8_t* payload, uint8_t len) {
 #if defined(ENABLE_SCREEN_LINK) && INPUT_RELAYS_DCO_TO_SCREEN
-  if (len != INPUT_SERIAL_LEN_PARAM_16) {
-    return;
-  }
-  serial_frame_write(ScreenDma, INPUT_CMD_PARAM_16, payload, len);
+  serial_frame_write(ScreenDma, CMD_PARAM_16, payload, len);
 #else
   (void)payload;
   (void)len;
 #endif
 }
 
-// DCO4 Screen is on Input Serial1; do not relay the full persistable 'p' set
-// (preset-recall toast). Forward only the manual-cal amp / PW echoes.
 static void serial_forward_cal_amp_pw_to_screen_dco4(const uint8_t* payload, uint8_t len) {
 #if defined(ENABLE_SCREEN_LINK) && !INPUT_RELAYS_DCO_TO_SCREEN
-  if (len != INPUT_SERIAL_LEN_PARAM_16) {
-    return;
-  }
-  serial_frame_write(ScreenDma, INPUT_CMD_PARAM_16, payload, len);
+  serial_frame_write(ScreenDma, CMD_PARAM_16, payload, len);
 #else
   (void)payload;
   (void)len;
 #endif
 }
 
-// Handle 32-bit PARAM ('x') from the DCO:
-//   154 PARAM_GAP_FROM_DCO → forward the same 'x' on to the Screen
-//   155 PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO → store + optional 'y' echo
-//   value (uint32) lower 16 bits for 155 = [oscIndex:8 | offset:8]
 static void __not_in_flash_func(input_handle_param32_from_dco)(char, const uint8_t* payload, uint8_t len) {
-  if (len != INPUT_SERIAL_LEN_PARAM_32) {
-    return;
-  }
-
   ParamFrame frame;
   decode_param_x(payload, frame);
 
@@ -185,212 +248,86 @@ static void __not_in_flash_func(input_handle_param32_from_dco)(char, const uint8
     return;
   }
 
-  if (frame.id != (uint8_t)PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO) {
-    return;
-  }
+  if (frame.id == (uint8_t)PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO) {
+    uint16_t packed   = (uint16_t)frame.value;
+    uint8_t  oscIndex = (uint8_t)(packed >> 8);
+    int8_t   offset   = (int8_t)(packed & 0xFF);
 
-  uint16_t packed  = (uint16_t)frame.value;
-  uint8_t  oscIndex = (uint8_t)(packed >> 8);
-  int8_t   offset   = (int8_t)(packed & 0xFF);
-
-  if (oscIndex < NUM_OSCILLATORS) {
-    manualCalibrationInitAmpCompOffset[oscIndex] = offset;
-    if (manualCalibration) {
-      uint8_t currentIndex = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
-      if (oscIndex == currentIndex) {
-        serialSendParamByteToScreen(
-          ParamId::PARAM_MANUAL_CALIBRATION_OFFSET,
-          (uint8_t)manualCalibrationInitAmpCompOffset[currentIndex]
-        );
+    if (oscIndex < NUM_OSCILLATORS) {
+      manualCalibrationInitAmpCompOffset[oscIndex] = offset;
+      if (manualCalibration) {
+        uint8_t currentIndex = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
+        if (oscIndex == currentIndex) {
+          serialSendParamByteToScreen(
+            ParamId::PARAM_MANUAL_CALIBRATION_OFFSET,
+            (uint8_t)manualCalibrationInitAmpCompOffset[currentIndex]
+          );
+        }
       }
     }
   }
 }
 
-// DCO→Input persistable 'p' mirror (USB/MIDI/dco_control, and now DCO-side
-// preset loads too). Update the in-RAM synth-state locals below (no LittleFS
-// involved — Input has none), forward wire 'p' to Screen toasts. Never re-TX
-// to DCO (loop / Aux).
 static void input_handle_param16_from_dco(char, const uint8_t* payload, uint8_t len) {
-  if (len != INPUT_SERIAL_LEN_PARAM_16) {
-    return;
-  }
-
   ParamFrame frame;
   decode_param_p(payload, frame);
-  const uint8_t id = frame.id;
-  const int16_t v  = (int16_t)frame.value;
 
-  if (id >= (uint8_t)ParamId::PARAM_MOD_SLOT0_SOURCE &&
-      id <= (uint8_t)ParamId::PARAM_MOD_SLOT7_DEPTH) {
-    const uint8_t slot  = (uint8_t)((id - (uint8_t)ParamId::PARAM_MOD_SLOT0_SOURCE) / 3);
-    const uint8_t field = (uint8_t)((id - (uint8_t)ParamId::PARAM_MOD_SLOT0_SOURCE) % 3);
-    if (slot < MOD_SLOT_COUNT_INPUT) {
-      if (field == 0) {
-        modSlotSource[slot] = (uint8_t)v;
-      } else if (field == 1) {
-        modSlotDest[slot] = (uint8_t)v;
-      } else {
-        modSlotDepth[slot] = v;
-      }
-    }
-  } else {
-    switch (id) {
-      // LEDs 0..4 sit behind these (board_model.h inputWaveKeys) and nothing here
-      // drives the shift register, so ask loop1 for a refresh.
-      case ParamId::PARAM_OSC1_SAW_ENABLE:    waveEnable[0][0] = (v != 0); ledRefreshPending = true; break;
-      case ParamId::PARAM_OSC1_PULSE_ENABLE:  waveEnable[0][1] = (v != 0); ledRefreshPending = true; break;
-      case ParamId::PARAM_OSC1_TRI_ENABLE:    waveEnable[0][2] = (v != 0); ledRefreshPending = true; break;
-      case ParamId::PARAM_OSC2_SAW_ENABLE:    waveEnable[1][0] = (v != 0); ledRefreshPending = true; break;
-      case ParamId::PARAM_OSC2_PULSE_ENABLE:  waveEnable[1][1] = (v != 0); ledRefreshPending = true; break;
-      case ParamId::PARAM_OSC2_TRI_ENABLE:    waveEnable[1][2] = (v != 0); ledRefreshPending = true; break;
-      case ParamId::PARAM_OSC3_SAW_ENABLE:    waveEnable[2][0] = (v != 0); ledRefreshPending = true; break;
-      case ParamId::PARAM_OSC3_PULSE_ENABLE:  waveEnable[2][1] = (v != 0); ledRefreshPending = true; break;
-      case ParamId::PARAM_OSC3_TRI_ENABLE:    waveEnable[2][2] = (v != 0); ledRefreshPending = true; break;
+  // Dispatch to O(1) jump table in params.ino
+  update_parameters((uint8_t)frame.id, (int16_t)frame.value);
 
-      case ParamId::PARAM_RESONANCE_COMPENSATION: RESONANCEAmpCompensation = (v != 0); break;
-      case ParamId::PARAM_VCA_ADSR_RESTART:       VCAADSRRestart = (v != 0); break;
-      case ParamId::PARAM_VCF_ADSR_RESTART:       VCFADSRRestart = (v != 0); break;
-      case ParamId::PARAM_ADSR3_ENABLED:          ADSR3Enabled = (v != 0); break;
-
-      case ParamId::PARAM_ADSR3_TO_OSC_SELECT:
-        ADSR3ToOscSelect = (int8_t)constrain(v, 0, INPUT_ADSR3_TO_OSC_SELECT_MAX);
-        break;
-
-      case ParamId::PARAM_LFO1_WAVEFORM: LFO1Waveform = (int8_t)v; break;
-      case ParamId::PARAM_LFO2_WAVEFORM: LFO2Waveform = (int8_t)v; break;
-
-      case ParamId::PARAM_OSC1_INTERVAL: OSC1Interval = (int8_t)v; break;
-      case ParamId::PARAM_OSC2_INTERVAL: OSC2Interval = (int8_t)v; break;
-      case ParamId::PARAM_OSC3_INTERVAL: OSC3Interval = (int8_t)v; break;
-
-      case ParamId::PARAM_OSC2_DETUNE_VAL: OSC2Detune = v; break;
-      case ParamId::PARAM_OSC3_DETUNE_VAL: OSC3Detune = v; break;
-      case ParamId::PARAM_LFO2_TO_OSC2:    LFO2toOSC2DETUNE = v; break;
-      case ParamId::PARAM_LFO2_TO_OSC3:    LFO2toOSC3DETUNE = v; break;
-
-      case ParamId::PARAM_OSC_SYNC_MODE:   oscSyncMode = (uint16_t)v; break;
-      case ParamId::PARAM_PORTAMENTO_TIME: portamentoTime = v; break;
-      case ParamId::PARAM_PORTAMENTO_MODE: portamentoMode = (byte)v; break;
-      case ParamId::PARAM_VOICE_MODE:      voiceMode = (byte)constrain(v, 0, 2); break;
-      case ParamId::PARAM_VOICE_ALLOC_MODE: voiceAllocMode = (byte)constrain(v, 0, 5); break;
-      case ParamId::PARAM_UNISON_DETUNE:   unisonDetune = v; break;
-      case ParamId::PARAM_SYNC_MODE:       syncMode = (byte)v; break;
-      case ParamId::PARAM_SOFT_SYNC:       softSync = (uint8_t)v; break;
-      case ParamId::PARAM_SUBOSC_DIVIDE:   subOscDivide = (uint8_t)v; break;
-      case ParamId::PARAM_FILTER_MODE:     filterMode = (uint8_t)v; break;
-
-      case ParamId::PARAM_ANALOG_DRIFT_AMOUNT: analogDrift = v; break;
-      case ParamId::PARAM_ANALOG_DRIFT_SPEED:  analogDriftSpeed = v; break;
-      case ParamId::PARAM_ANALOG_DRIFT_SPREAD: analogDriftSpread = v; break;
-
-      case ParamId::PARAM_VCF_KEYTRACK:     VCFKeytrack = v; break;
-      case ParamId::PARAM_VELOCITY_TO_VCF:  velocityToVCF = (int8_t)v; break;
-      case ParamId::PARAM_VELOCITY_TO_VCA:  velocityToVCA = (int8_t)v; break;
-
-      case ParamId::PARAM_OSC1_LEVEL: OSC1Level = v; break;
-      case ParamId::PARAM_OSC2_LEVEL: OSC2Level = v; break;
-      case ParamId::PARAM_SUB_LEVEL:  SubLevel = v; break;
-      case ParamId::PARAM_OSC3_LEVEL: OSC3Level = v; break;
-
-      case ParamId::PARAM_LFO1_TO_DCO: LFO1toDCO = v; break;
-      case ParamId::PARAM_LFO1_SPEED:  LFO1Speed = v; break;
-      case ParamId::PARAM_LFO2_SPEED:  LFO2Speed = v; break;
-      case ParamId::PARAM_VCA_LEVEL:   VCALevel = v; break;
-      case ParamId::PARAM_LFO1_TO_VCA: LFO1toVCA = v; break;
-      case ParamId::PARAM_LFO2_TO_PW:  LFO2toPWM = v; break;
-      case ParamId::PARAM_ADSR3_TO_PWM:
-        ADSR3toPWM = (int16_t)constrain((int32_t)v - 512, -512, 511);
-        break;
-      case ParamId::PARAM_ADSR3_TO_DETUNE1: ADSR3toDETUNE1 = v; break;
-
-      case ParamId::PARAM_ADSR1_ATTACK_CURVE: ADSR1AttackCurveVal = (int8_t)v; break;
-      case ParamId::PARAM_ADSR1_DECAY_CURVE:  ADSR1DecayCurveVal = (int8_t)v; break;
-      case ParamId::PARAM_ADSR2_ATTACK_CURVE: ADSR2AttackCurveVal = (int8_t)v; break;
-      case ParamId::PARAM_ADSR2_DECAY_CURVE:  ADSR2DecayCurveVal = (int8_t)v; break;
-
-      case ParamId::PARAM_DIST_DRIVE: distDrive = (uint16_t)v; break;
-      case ParamId::PARAM_DIST_MIX:   distMix = (uint16_t)v; break;
-
-      case ParamId::PARAM_PW_VALUE:     PW = (uint16_t)v; break;
-      case ParamId::PARAM_AMP_COMP_440: {
-        uint8_t osc = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
-        if (v <= 0) {
-          manualAmpComp440[osc] = 0;
-        } else {
-          int16_t amp = v;
-          if (amp < AMP_COMP_440_MIN) amp = AMP_COMP_440_MIN;
-          if (amp > AMP_COMP_440_MAX) amp = AMP_COMP_440_MAX;
-          manualAmpComp440[osc] = (uint16_t)amp;
-        }
-        serial_forward_cal_amp_pw_to_screen_dco4(payload, len);
-        break;
-      }
-      case ParamId::PARAM_CAL_PW_CENTER: {
-        uint8_t osc = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
-        uint8_t ch = INPUT_CAL_PW_CH(osc);
-        if (ch >= NUM_VOICES) ch = NUM_VOICES - 1;
-        int32_t pw = v;
-        if (pw < 0) pw = 0;
-        if (pw > CAL_PW_CENTER_MAX) pw = CAL_PW_CENTER_MAX;
-        manualPwCenter[ch] = (uint16_t)pw;
-        serial_forward_cal_amp_pw_to_screen_dco4(payload, len);
-        break;
-      }
-      case ParamId::PARAM_ADSR1_TO_VCA: ADSR1toVCA = v; break;
-
-      case ParamId::PARAM_LFO1_TO_OSC1:
-        LFO1toOSC1 = (uint8_t)constrain(v, 0, 255);
-        break;
-      case ParamId::PARAM_LFO1_TO_OSC2:
-        LFO1toOSC2 = (uint8_t)constrain(v, 0, 255);
-        break;
-      case ParamId::PARAM_LFO1_TO_OSC3:
-        LFO1toOSC3 = (uint8_t)constrain(v, 0, 255);
-        break;
-      case ParamId::PARAM_LFO2_TO_OSC2_COARSE:
-        LFO2toOSC2_coarse = (uint16_t)constrain(v, 0, 511);
-        break;
-      case ParamId::PARAM_LFO2_TO_OSC3_COARSE:
-        LFO2toOSC3_coarse = (uint16_t)constrain(v, 0, 511);
-        break;
-      case ParamId::PARAM_CHARACTER:
-        characterAmount = (uint8_t)constrain(v, 0, 128);
-        break;
-      case ParamId::PARAM_ADSR3_PITCH_MODE:
-        env_dco_pitch_centered = (v != 0) ? 1 : 0;
-        break;
-
-      default:
-        break;
-    }
+  // Forward manual cal trims to screen on DCO4
+  if (frame.id == (uint8_t)ParamId::PARAM_AMP_COMP_440 || frame.id == (uint8_t)ParamId::PARAM_CAL_PW_CENTER) {
+    serial_forward_cal_amp_pw_to_screen_dco4(payload, len);
   }
-
   serial_forward_param16_to_screen(payload, len);
 }
 
-// A UI-only 'p' the Screen displays but the DCO never sees (ids 191-194). Only
-// the DCO-origin filter mirror uses it, so it follows the same one-hop rule: on
-// DCO4 the Mainboard sends these four ids itself (mb_send_filter_ui_to_screen).
+static void input_apply_adsr_block_from_dco(const uint8_t* payload, uint16_t& attack, uint16_t& decay, uint16_t& sustain, uint16_t& release) {
+  attack  = exp_to_lin_index(decode_u16_le(payload + 0));
+  decay   = exp_to_lin_index(decode_u16_le(payload + 2));
+  sustain = decode_u16_le(payload + 4);
+  release = exp_to_lin_index(decode_u16_le(payload + 6));
+}
+
+static void input_forward_adsr_block_to_screen(uint8_t cmd, uint16_t attack, uint16_t decay, uint16_t sustain, uint16_t release) {
+#if defined(ENABLE_SCREEN_LINK) && INPUT_RELAYS_DCO_TO_SCREEN
+  uint8_t payload[SERIAL_LEN_ADSR_BLOCK];
+  encode_u16_le(payload + 0, attack);
+  encode_u16_le(payload + 2, decay);
+  encode_u16_le(payload + 4, sustain);
+  encode_u16_le(payload + 6, release);
+  serial_frame_write(ScreenDma, cmd, payload, SERIAL_LEN_ADSR_BLOCK);
+#else
+  (void)cmd; (void)attack; (void)decay; (void)sustain; (void)release;
+#endif
+}
+
+static void input_handle_adsr1_from_dco(char, const uint8_t* payload, uint8_t) {
+  input_apply_adsr_block_from_dco(payload, ADSR1_attack, ADSR1_decay, ADSR1_sustain, ADSR1_release);
+  input_forward_adsr_block_to_screen(CMD_ADSR1_BLOCK, ADSR1_attack, ADSR1_decay, ADSR1_sustain, ADSR1_release);
+}
+
+static void input_handle_adsr2_from_dco(char, const uint8_t* payload, uint8_t) {
+  input_apply_adsr_block_from_dco(payload, ADSR2_attack, ADSR2_decay, ADSR2_sustain, ADSR2_release);
+  input_forward_adsr_block_to_screen(CMD_ADSR2_BLOCK, ADSR2_attack, ADSR2_decay, ADSR2_sustain, ADSR2_release);
+}
+
+static void input_handle_adsr3_from_dco(char, const uint8_t* payload, uint8_t) {
+  input_apply_adsr_block_from_dco(payload, ADSR3_attack, ADSR3_decay, ADSR3_sustain, ADSR3_release);
+}
+
 static void input_send_ui_param_to_screen(uint8_t id, int16_t value) {
 #if defined(ENABLE_SCREEN_LINK) && INPUT_RELAYS_DCO_TO_SCREEN
-  uint8_t payload[INPUT_SERIAL_LEN_PARAM_16];
+  uint8_t payload[SERIAL_LEN_PARAM_16];
   encode_param_p(payload, id, value);
-  serial_frame_write(ScreenDma, INPUT_CMD_PARAM_16, payload, INPUT_SERIAL_LEN_PARAM_16);
+  serial_frame_write(ScreenDma, CMD_PARAM_16, payload, SERIAL_LEN_PARAM_16);
 #else
   (void)id;
   (void)value;
 #endif
 }
 
-// 'd' filter block echoed back after a preset recall (and, on DCO4, after any
-// Mainboard-side filter change). Track the locals so the pots pick up from the
-// recalled values. The Screen has no 'd' handler — the filter pots are analog
-// and have no ParamId of their own — so the changed fields go out as the UI
-// 'p' ids instead, which reuse the Screen's normal name/toast path.
-static void input_handle_filter_block_from_dco(char, const uint8_t* payload, uint8_t len) {
-  if (len != INPUT_SERIAL_LEN_FILTER_BLOCK) return;
-
+static void input_handle_filter_block_from_dco(char, const uint8_t* payload, uint8_t) {
   const uint16_t cutoff     = decode_u16_le(payload + 0);
   const uint16_t resonance  = decode_u16_le(payload + 2);
   const int16_t  adsr2toVCF = decode_i16_le(payload + 4);
@@ -414,70 +351,76 @@ static void input_handle_filter_block_from_dco(char, const uint8_t* payload, uin
   }
 }
 
-// 'a'/'b'/'c' echoed back for the same reasons as 'd'. The wire carries the
-// exp-mapped times the DCO wants; the faders and the Screen work in the 0..4095
-// index domain, so A/D/R are inverted back through the lookup table (S is
-// linear on both sides). Applying is unconditional: a preset recall already
-// clears the manual flags, and while a row is in manual mode the next fader
-// scan simply overwrites this.
-static void input_apply_adsr_block_from_dco(const uint8_t* payload,
-                                            uint16_t& attack, uint16_t& decay,
-                                            uint16_t& sustain, uint16_t& release) {
-  attack  = exp_to_lin_index(decode_u16_le(payload + 0));
-  decay   = exp_to_lin_index(decode_u16_le(payload + 2));
-  sustain = decode_u16_le(payload + 4);
-  release = exp_to_lin_index(decode_u16_le(payload + 6));
+// Domain Block Ingress Handlers (Defined ABOVE dcoLinkCommands table)
+static void input_handle_patch_osc_block_from_dco(char, const uint8_t* payload, uint8_t) {
+  const PatchOscBlock* blk = (const PatchOscBlock*)payload;
+  OSC1Interval     = blk->osc1_interval;
+  OSC2Interval     = blk->osc2_interval;
+  OSC3Interval     = blk->osc3_interval;
+  OSC2Detune       = blk->osc2_detune;
+  unisonDetune     = blk->unison_detune;
+  voiceMode        = blk->voice_mode;
+  voiceAllocMode   = blk->voice_alloc_mode;
+  syncMode         = blk->sync_mode;
+  softSync         = blk->soft_sync;
+  subOscDivide     = blk->subosc_divide;
+  analogDrift      = blk->analog_drift;
+  analogDriftSpeed = blk->analog_drift_speed;
+  analogDriftSpread= blk->analog_drift_spread;
+  portamentoTime   = blk->portamento_time;
+  portamentoMode   = blk->portamento_mode;
+  characterAmount  = blk->character;
 }
 
-static void input_forward_adsr_block_to_screen(uint8_t cmd,
-                                               uint16_t attack, uint16_t decay,
-                                               uint16_t sustain, uint16_t release) {
-#if defined(ENABLE_SCREEN_LINK) && INPUT_RELAYS_DCO_TO_SCREEN
-  uint8_t payload[INPUT_SERIAL_LEN_ADSR_BLOCK];
-  encode_u16_le(payload + 0, attack);
-  encode_u16_le(payload + 2, decay);
-  encode_u16_le(payload + 4, sustain);
-  encode_u16_le(payload + 6, release);
-  serial_frame_write(ScreenDma, cmd, payload, INPUT_SERIAL_LEN_ADSR_BLOCK);
-#else
-  (void)cmd; (void)attack; (void)decay; (void)sustain; (void)release;
-#endif
+static void input_handle_patch_lfo_block_from_dco(char, const uint8_t* payload, uint8_t) {
+  const PatchLfoBlock* blk = (const PatchLfoBlock*)payload;
+  LFO1Waveform           = blk->lfo1_waveform;
+  LFO2Waveform           = blk->lfo2_waveform;
+  LFO1Speed              = blk->lfo1_speed;
+  LFO2Speed              = blk->lfo2_speed;
+  LFO1toDCO              = blk->lfo1_to_dco;
+  LFO1toOSC1             = blk->lfo1_to_osc1;
+  LFO1toOSC2             = blk->lfo1_to_osc2;
+  LFO1toOSC3             = blk->lfo1_to_osc3;
+  LFO2toOSC2DETUNE       = blk->lfo2_to_osc2;
+  LFO2toOSC3DETUNE       = blk->lfo2_to_osc3;
+  LFO2toOSC2_coarse      = blk->lfo2_to_osc2_coarse;
+  LFO2toOSC3_coarse      = blk->lfo2_to_osc3_coarse;
+  LFO2toPWM              = blk->lfo2_to_pw;
+  LFO1toVCA              = blk->lfo1_to_vca;
+  PW                     = blk->pw_value;
+  ADSR1toVCA             = blk->adsr1_to_vca;
+  ADSR3toPWM             = blk->adsr3_to_pwm;
+  ADSR3toDETUNE1         = blk->adsr3_to_detune1;
+  env_dco_pitch_centered = blk->adsr3_pitch_mode;
+  ADSR3ToOscSelect       = blk->adsr3_to_osc_select;
 }
 
-static void input_handle_adsr1_from_dco(char, const uint8_t* payload, uint8_t len) {
-  if (len != INPUT_SERIAL_LEN_ADSR_BLOCK) return;
-  input_apply_adsr_block_from_dco(payload, ADSR1_attack, ADSR1_decay,
-                                  ADSR1_sustain, ADSR1_release);
-  input_forward_adsr_block_to_screen(INPUT_CMD_ADSR1_BLOCK, ADSR1_attack, ADSR1_decay,
-                                     ADSR1_sustain, ADSR1_release);
+static void input_handle_patch_mod_block_from_dco(char, const uint8_t* payload, uint8_t) {
+  const PatchModBlock* blk = (const PatchModBlock*)payload;
+  for (uint8_t i = 0; i < 8; i++) {
+    modSlotSource[i] = blk->slots[i].src;
+    modSlotDest[i]   = blk->slots[i].dest;
+    modSlotDepth[i]  = blk->slots[i].depth;
+  }
 }
 
-static void input_handle_adsr2_from_dco(char, const uint8_t* payload, uint8_t len) {
-  if (len != INPUT_SERIAL_LEN_ADSR_BLOCK) return;
-  input_apply_adsr_block_from_dco(payload, ADSR2_attack, ADSR2_decay,
-                                  ADSR2_sustain, ADSR2_release);
-  input_forward_adsr_block_to_screen(INPUT_CMD_ADSR2_BLOCK, ADSR2_attack, ADSR2_decay,
-                                     ADSR2_sustain, ADSR2_release);
-}
-
-// EnvDCO stays off the Screen: 'c' on that link is the save-name char select,
-// and the panel never sent ADSR3 there either. Locals only, so the faders pick
-// up from a host or preset edit.
-static void input_handle_adsr3_from_dco(char, const uint8_t* payload, uint8_t len) {
-  if (len != INPUT_SERIAL_LEN_ADSR_BLOCK) return;
-  input_apply_adsr_block_from_dco(payload, ADSR3_attack, ADSR3_decay,
-                                  ADSR3_sustain, ADSR3_release);
-}
+// =============================================================================
+// 4. Ingress Table & Parsing
+// =============================================================================
 
 static const SerialCommandDef dcoLinkCommands[] = {
-  { INPUT_CMD_PARAM_16, INPUT_SERIAL_LEN_PARAM_16, input_handle_param16_from_dco },
-  { INPUT_CMD_PARAM_32, INPUT_SERIAL_LEN_PARAM_32, input_handle_param32_from_dco },
-  { INPUT_CMD_ADSR1_BLOCK, INPUT_SERIAL_LEN_ADSR_BLOCK, input_handle_adsr1_from_dco },
-  { INPUT_CMD_ADSR2_BLOCK, INPUT_SERIAL_LEN_ADSR_BLOCK, input_handle_adsr2_from_dco },
-  { INPUT_CMD_ADSR3_BLOCK, INPUT_SERIAL_LEN_ADSR_BLOCK, input_handle_adsr3_from_dco },
-  { INPUT_CMD_FILTER_BLOCK, INPUT_SERIAL_LEN_FILTER_BLOCK, input_handle_filter_block_from_dco },
-  { INPUT_CMD_PRESET_DIR_ENTRY, INPUT_SERIAL_LEN_PRESET_DIR_ENTRY, input_handle_preset_dir_entry },
-  { INPUT_CMD_PRESET_LOADED,    INPUT_SERIAL_LEN_PRESET_LOADED,    input_handle_preset_loaded    },
+  { CMD_PARAM_16,         SERIAL_LEN_PARAM_16,         input_handle_param16_from_dco },
+  { CMD_PARAM_32,         SERIAL_LEN_PARAM_32,         input_handle_param32_from_dco },
+  { CMD_ADSR1_BLOCK,      SERIAL_LEN_ADSR_BLOCK,       input_handle_adsr1_from_dco },
+  { CMD_ADSR2_BLOCK,      SERIAL_LEN_ADSR_BLOCK,       input_handle_adsr2_from_dco },
+  { CMD_ADSR3_BLOCK,      SERIAL_LEN_ADSR_BLOCK,       input_handle_adsr3_from_dco },
+  { CMD_FILTER_BLOCK,     SERIAL_LEN_FILTER_BLOCK,     input_handle_filter_block_from_dco },
+  { CMD_PRESET_DIR_ENTRY, SERIAL_LEN_PRESET_DIR_ENTRY, input_handle_preset_dir_entry },
+  { CMD_PRESET_LOADED,    SERIAL_LEN_PRESET_LOADED,    input_handle_preset_loaded    },
+  { CMD_BLOCK_OSC,        SERIAL_LEN_BLOCK_OSC,        input_handle_patch_osc_block_from_dco },
+  { CMD_BLOCK_LFO,        SERIAL_LEN_BLOCK_LFO,        input_handle_patch_lfo_block_from_dco },
+  { CMD_BLOCK_MOD,        SERIAL_LEN_BLOCK_MOD,        input_handle_patch_mod_block_from_dco },
 };
 
 static SerialCommandTable dcoLinkLut;

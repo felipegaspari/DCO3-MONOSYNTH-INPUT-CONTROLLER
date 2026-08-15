@@ -34,7 +34,6 @@ int16_t VCALevel = 0;
 #include <stdint.h>
 #include "params_def.h"
 #include "params.h"
-#include "param_router.h"
 
 #include "auxiliary.h"
 
@@ -78,6 +77,7 @@ void setup1() {
   DCO_PORT.setPollingMode(false);
   DCO_PORT.setFIFOSize(512);
   DCO_PORT.begin(2500000);
+  init_param_router();
   init_dco_link_parser();
 #endif
 
