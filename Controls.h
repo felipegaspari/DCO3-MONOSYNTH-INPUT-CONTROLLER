@@ -156,8 +156,16 @@ bool allControlsManual = false;
 bool ADSR3Enabled = false;
 
 bool presetSelect = false;
-bool presetSaveSelectMode = false;
-bool presetSaveMode = false;
+
+// Preset save UI flow (buttons.ino drives the transitions):
+//   IDLE -> SELECT (scroll to a slot) -> NAME_EDIT (edit name) -> commit -> IDLE
+enum class SaveFlow : uint8_t {
+  IDLE,
+  SELECT,
+  NAME_EDIT,
+};
+SaveFlow saveFlow = SaveFlow::IDLE;
+
 bool presetSaved = true;
 
 uint8_t presetSelectVal = 0;

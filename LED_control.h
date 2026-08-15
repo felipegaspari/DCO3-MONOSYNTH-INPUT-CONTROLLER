@@ -19,6 +19,10 @@ Rox74HC595<2> LED_Control_Mux;
 
 uint8_t LEDPins[16] = { 5, 4, 3, 2, 1, 0, 7, 6, 11, 12, 9, 10, 8, 8, 8, 8 };
 
+// Passing this as LEDNumber to set_LED_Status()/update_LED_Control() refreshes
+// every LED from the wave/manual status flags instead of driving one pin.
+#define LED_REFRESH_ALL 16
+
 bool LEDState[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 bool LEDBlink[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 

@@ -18,7 +18,7 @@ static byte presetDir[INPUT_PRESET_NUM_SLOTS][16];
 void request_preset_directory() {
 #ifdef ENABLE_DCO_LINK
   uint8_t pad = 0;
-  serial_frame_write(DCO_PORT, INPUT_CMD_PRESET_DIR_REQUEST, &pad, INPUT_SERIAL_LEN_PRESET_DIR_REQUEST);
+  serial_frame_write(DcoDma, INPUT_CMD_PRESET_DIR_REQUEST, &pad, INPUT_SERIAL_LEN_PRESET_DIR_REQUEST);
 #endif
 }
 
@@ -97,14 +97,13 @@ void preset_save_to_board(uint16_t slot) {
 
   memcpy(presetDir[slot], presetNameVal, 16);
 
-  presetSaveSelectMode = false;
-  presetSaveMode = false;
+  saveFlow = SaveFlow::IDLE;
 
   currentPreset = slot;
   presetSelectVal = currentPreset;
   memcpy(presetName, presetNameVal, 16);
 
-  set_LED_Status(16, 0);
+  set_LED_Status(LED_REFRESH_ALL, 0);
 }
 
 // PARAM_PRESET_LOAD (171): tell the DCO to recall slot. The DCO applies the
@@ -133,7 +132,7 @@ void preset_load_from_board(uint16_t slot) {
   // Optimistic, and deliberately ahead of the DCO: this lands before the DCO's
   // own Silent marker, so it cannot cut the recall silence short.
   serial_send_preset_scroll(currentPreset, presetName);
-  serial_send_signal(1);
+  serial_send_signal(SIGNAL_PRESET_LOAD_SCROLL);
 }
 
 // Post-save UI/state cleanup (clear session manual flags, refresh LEDs).
@@ -145,13 +144,12 @@ void writePresetActions(uint16_t presetN) {
   PWMPotsControlManual = false;
   VCAPotsControlManual = false;
 
-  presetSaveSelectMode = false;
-  presetSaveMode = false;
+  saveFlow = SaveFlow::IDLE;
 
   currentPreset = presetN;
   presetSelectVal = currentPreset;
 
-  set_LED_Status(16, 0);
+  set_LED_Status(LED_REFRESH_ALL, 0);
 }
 
 // Post-load UI/state cleanup (session flags only; does not alter patch).

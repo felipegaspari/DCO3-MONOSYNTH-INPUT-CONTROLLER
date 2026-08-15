@@ -1,7 +1,7 @@
 // Screen UI mode signal ('s' + byte).
 void __not_in_flash_func(serial_send_signal)(byte signal) {
 #ifdef ENABLE_SCREEN_LINK
-  serial_frame_write(SCREEN_PORT, (uint8_t)'s', &signal, 1);
+  serial_frame_write(ScreenDma, (uint8_t)'s', &signal, 1);
 #endif
 }
 
@@ -11,12 +11,12 @@ void __not_in_flash_func(serial_send_param_change)(byte param, uint16_t paramVal
   encode_param_p(payload, param, (int16_t)paramValue);
 #ifdef ENABLE_SCREEN_LINK
   if (sendToAll) {
-    serial_frame_write(SCREEN_PORT, INPUT_CMD_PARAM_16, payload, INPUT_SERIAL_LEN_PARAM_16);
+    serial_frame_write(ScreenDma, INPUT_CMD_PARAM_16, payload, INPUT_SERIAL_LEN_PARAM_16);
   }
 #endif
 #ifdef ENABLE_DCO_LINK
   if (paramValue != (uint16_t)-1) {
-    serial_frame_write(DCO_PORT, INPUT_CMD_PARAM_16, payload, INPUT_SERIAL_LEN_PARAM_16);
+    serial_frame_write(DcoDma, INPUT_CMD_PARAM_16, payload, INPUT_SERIAL_LEN_PARAM_16);
   }
 #endif
 }
@@ -27,14 +27,14 @@ void __not_in_flash_func(serial_send_param_change_byte)(byte param, byte paramVa
   if (sendToAll) {
     uint8_t w[SERIAL_LEN_PARAM_8];
     encode_param_w(w, param, paramValue);
-    serial_frame_write(SCREEN_PORT, (uint8_t)'w', w, SERIAL_LEN_PARAM_8);
+    serial_frame_write(ScreenDma, (uint8_t)'w', w, SERIAL_LEN_PARAM_8);
   }
 #endif
 #ifdef ENABLE_DCO_LINK
   if (paramValue != (byte)-1) {
     uint8_t p[INPUT_SERIAL_LEN_PARAM_16];
     encode_param_p(p, param, (int16_t)paramValue);
-    serial_frame_write(DCO_PORT, INPUT_CMD_PARAM_16, p, INPUT_SERIAL_LEN_PARAM_16);
+    serial_frame_write(DcoDma, INPUT_CMD_PARAM_16, p, INPUT_SERIAL_LEN_PARAM_16);
   }
 #endif
 }
@@ -42,7 +42,7 @@ void __not_in_flash_func(serial_send_param_change_byte)(byte param, byte paramVa
 // Send preset name (16 chars) to the DCO via 'q'.
 void serial_send_preset_name_to_mainboard() {
 #ifdef ENABLE_DCO_LINK
-  serial_frame_write(DCO_PORT, INPUT_CMD_PRESET_NAME, presetNameVal, INPUT_SERIAL_LEN_PRESET_NAME);
+  serial_frame_write(DcoDma, INPUT_CMD_PRESET_NAME, presetNameVal, INPUT_SERIAL_LEN_PRESET_NAME);
 #endif
 }
 
@@ -54,14 +54,14 @@ void serial_send_preset_scroll(byte presetNumber, byte presetNameSerial[]) {
   for (uint8_t i = 0; i < 16; ++i) {
     payload[1 + i] = presetNameSerial[i];
   }
-  serial_frame_write(SCREEN_PORT, (uint8_t)'q', payload, 17);
+  serial_frame_write(ScreenDma, (uint8_t)'q', payload, 17);
 #endif
 }
 
 // Send save-name character position to the Screen via 'c'.
 void serial_send_save_char_select(byte serialPresetChar) {
 #ifdef ENABLE_SCREEN_LINK
-  serial_frame_write(SCREEN_PORT, (uint8_t)'c', &serialPresetChar, 1);
+  serial_frame_write(ScreenDma, (uint8_t)'c', &serialPresetChar, 1);
 #endif
 }
 
@@ -70,13 +70,53 @@ void __not_in_flash_func(serialSendParamByteToScreen)(byte paramNumber, byte par
 {
 #ifdef ENABLE_SCREEN_LINK
   uint8_t payload[2] = { paramNumber, paramValue };
-  serial_frame_write(SCREEN_PORT, (uint8_t)'y', payload, 2);
+  serial_frame_write(ScreenDma, (uint8_t)'y', payload, 2);
 #endif
 }
 
+// Screen-only 'p'. Stage-enter must not push OFFSET/159/162 to the DCO: its
+// LittleFS values are the source of truth, and Input's cache boots at 0.
+static void input_send_param16_to_screen(uint8_t id, int16_t value) {
+#ifdef ENABLE_SCREEN_LINK
+  uint8_t payload[INPUT_SERIAL_LEN_PARAM_16];
+  encode_param_p(payload, id, value);
+  serial_frame_write(ScreenDma, INPUT_CMD_PARAM_16, payload, INPUT_SERIAL_LEN_PARAM_16);
+#else
+  (void)id;
+  (void)value;
+#endif
+}
+
+// Push the current manual-cal stage to DCO + Screen. Offset / amp / PW go to
+// Screen from cache only; DCO echoes stored 159/162 on 440 / pw_edit stages
+// and packed 155 offsets on FLAG, which prime the encoder cache.
+void input_send_manual_cal_stage() {
+  const uint8_t stage = (uint8_t)manualCalibrationStage;
+  const uint8_t osc   = INPUT_CAL_STAGE_TO_OSC(stage);
+  serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_STAGE,
+                                stage, /*sendToAll=*/false);
+  serialSendParamByteToScreen(ParamId::PARAM_MANUAL_CALIBRATION_STAGE, stage);
+  if (INPUT_CAL_STAGE_IS_440(stage)) {
+    if (manualAmpComp440[osc] != 0) {
+      input_send_param16_to_screen(ParamId::PARAM_AMP_COMP_440,
+                                   (int16_t)manualAmpComp440[osc]);
+    }
+  } else if (INPUT_CAL_STAGE_IS_PW_EDIT(stage)) {
+    uint8_t ch = INPUT_CAL_PW_CH(osc);
+    if (ch >= NUM_VOICES) ch = NUM_VOICES - 1;
+    if (manualPwCenter[ch] != 0) {
+      input_send_param16_to_screen(ParamId::PARAM_CAL_PW_CENTER,
+                                   (int16_t)manualPwCenter[ch]);
+    }
+  } else {
+    serialSendParamByteToScreen(ParamId::PARAM_MANUAL_CALIBRATION_OFFSET,
+                                (uint8_t)manualCalibrationInitAmpCompOffset[osc]);
+  }
+}
+
 // ---------------------------------------------------------------------------
-// Parser-based receiver for Mainboard/DCO slim frames on DCO_PORT RX
-// (DCO4: GP5 <- Mainboard PE1; DCO3: GP1 <- DCO GP20).
+// Parser-based receiver for Mainboard/DCO slim frames on DCO_RX_PORT
+// (DCO4: Serial1 GP1 <- Mainboard PE1; DCO3: Serial1 GP1 <- DCO GP20).
 //
 // One rule decides who mirrors the DCO to the Screen: whoever is one hop away.
 // On DCO3 that is this board, because the Screen has no other link. On DCO4 the
@@ -94,7 +134,7 @@ static void __not_in_flash_func(serial_forward_param32_to_screen)(const uint8_t*
   if (len != INPUT_SERIAL_LEN_PARAM_32) {
     return;
   }
-  serial_frame_write(SCREEN_PORT, INPUT_CMD_PARAM_32, payload, len);
+  serial_frame_write(ScreenDma, INPUT_CMD_PARAM_32, payload, len);
 #else
   (void)payload;
   (void)len;
@@ -107,7 +147,21 @@ static void serial_forward_param16_to_screen(const uint8_t* payload, uint8_t len
   if (len != INPUT_SERIAL_LEN_PARAM_16) {
     return;
   }
-  serial_frame_write(SCREEN_PORT, INPUT_CMD_PARAM_16, payload, len);
+  serial_frame_write(ScreenDma, INPUT_CMD_PARAM_16, payload, len);
+#else
+  (void)payload;
+  (void)len;
+#endif
+}
+
+// DCO4 Screen is on Input Serial1; do not relay the full persistable 'p' set
+// (preset-recall toast). Forward only the manual-cal amp / PW echoes.
+static void serial_forward_cal_amp_pw_to_screen_dco4(const uint8_t* payload, uint8_t len) {
+#if defined(ENABLE_SCREEN_LINK) && !INPUT_RELAYS_DCO_TO_SCREEN
+  if (len != INPUT_SERIAL_LEN_PARAM_16) {
+    return;
+  }
+  serial_frame_write(ScreenDma, INPUT_CMD_PARAM_16, payload, len);
 #else
   (void)payload;
   (void)len;
@@ -259,6 +313,30 @@ static void input_handle_param16_from_dco(char, const uint8_t* payload, uint8_t 
       case ParamId::PARAM_DIST_MIX:   distMix = (uint16_t)v; break;
 
       case ParamId::PARAM_PW_VALUE:     PW = (uint16_t)v; break;
+      case ParamId::PARAM_AMP_COMP_440: {
+        uint8_t osc = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
+        if (v <= 0) {
+          manualAmpComp440[osc] = 0;
+        } else {
+          int16_t amp = v;
+          if (amp < AMP_COMP_440_MIN) amp = AMP_COMP_440_MIN;
+          if (amp > AMP_COMP_440_MAX) amp = AMP_COMP_440_MAX;
+          manualAmpComp440[osc] = (uint16_t)amp;
+        }
+        serial_forward_cal_amp_pw_to_screen_dco4(payload, len);
+        break;
+      }
+      case ParamId::PARAM_CAL_PW_CENTER: {
+        uint8_t osc = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
+        uint8_t ch = INPUT_CAL_PW_CH(osc);
+        if (ch >= NUM_VOICES) ch = NUM_VOICES - 1;
+        int32_t pw = v;
+        if (pw < 0) pw = 0;
+        if (pw > CAL_PW_CENTER_MAX) pw = CAL_PW_CENTER_MAX;
+        manualPwCenter[ch] = (uint16_t)pw;
+        serial_forward_cal_amp_pw_to_screen_dco4(payload, len);
+        break;
+      }
       case ParamId::PARAM_ADSR1_TO_VCA: ADSR1toVCA = v; break;
 
       case ParamId::PARAM_LFO1_TO_OSC1:
@@ -298,7 +376,7 @@ static void input_send_ui_param_to_screen(uint8_t id, int16_t value) {
 #if defined(ENABLE_SCREEN_LINK) && INPUT_RELAYS_DCO_TO_SCREEN
   uint8_t payload[INPUT_SERIAL_LEN_PARAM_16];
   encode_param_p(payload, id, value);
-  serial_frame_write(SCREEN_PORT, INPUT_CMD_PARAM_16, payload, INPUT_SERIAL_LEN_PARAM_16);
+  serial_frame_write(ScreenDma, INPUT_CMD_PARAM_16, payload, INPUT_SERIAL_LEN_PARAM_16);
 #else
   (void)id;
   (void)value;
@@ -360,7 +438,7 @@ static void input_forward_adsr_block_to_screen(uint8_t cmd,
   encode_u16_le(payload + 2, decay);
   encode_u16_le(payload + 4, sustain);
   encode_u16_le(payload + 6, release);
-  serial_frame_write(SCREEN_PORT, cmd, payload, INPUT_SERIAL_LEN_ADSR_BLOCK);
+  serial_frame_write(ScreenDma, cmd, payload, INPUT_SERIAL_LEN_ADSR_BLOCK);
 #else
   (void)cmd; (void)attack; (void)decay; (void)sustain; (void)release;
 #endif
@@ -406,6 +484,7 @@ static SerialCommandTable dcoLinkLut;
 static SerialParserContext dcoLinkParser = {};
 
 void init_dco_link_parser() {
+  serial_parser_reset(dcoLinkParser);
   serial_command_table_init(
     dcoLinkLut,
     dcoLinkCommands,
@@ -415,6 +494,8 @@ void init_dco_link_parser() {
 
 void __not_in_flash_func(serial_read_from_dco)() {
 #ifdef ENABLE_DCO_LINK
-  serial_parser_drain(dcoLinkParser, dcoLinkLut, DCO_PORT, SERIAL_DRAIN_BYTE_BUDGET);
+  while (DCO_RX_PORT.available() > 0) {
+    serial_parser_drain(dcoLinkParser, dcoLinkLut, DCO_RX_PORT, 255);
+  }
 #endif
 }

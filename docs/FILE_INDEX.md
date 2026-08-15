@@ -139,12 +139,13 @@ The header every model difference flows out of. It takes `INPUT_BOARD_MODEL` fro
 | `INPUT_HAS_OSC3_PANEL` | 1 | 0 | `encoders.h` (`ENC_OSC3_INTERVAL`, `ENC_OSC3_DETUNE`, `ENC_LFO2_TO_OSC3`) |
 | `INPUT_ADSR3_TO_OSC_SELECT_MAX` | 4 | 2 | `buttons.ino` (`TG_ADSR3_TO_OSC_SELECT` wrap), `Serial.ino` (`PARAM_ADSR3_TO_OSC_SELECT` clamp) |
 | `INPUT_DEFAULT_VOICE_MODE` | 0 (mono) | 1 (poly) | `params.h` (`voiceMode` initialiser) |
-| `INPUT_CAL_STAGES_PER_OSC` | 2 (saw, then pulse) | 1 | `INPUT_CAL_STAGE_MAX`, `INPUT_CAL_STAGE_TO_OSC` |
-| `INPUT_CAL_STAGE_MAX` | 5 (6 stages) | 7 (8 stages) | `encoders.ino` (`ACTION_CALIBRATION_STAGE` clamp) |
-| `INPUT_CAL_STAGE_TO_OSC(stage)` | `stage / 2` | `stage` | `encoders.ino` (both cal actions), `buttons.ino` (`TG_MAN_CALIBRATION`), `Serial.ino` (cal offset 155 echo) |
+| `INPUT_CAL_STAGE_MAX` | 8 (9 stages) | 27 (28 packed A4+B3) | `encoders.ino` (`ACTION_CALIBRATION_STAGE` clamp) |
+| `INPUT_CAL_STAGE_TO_OSC(stage)` | `cal_stage_to_osc_n` (uniform 3) | packed A4+B3 | `encoders.ino` (both cal actions), `buttons.ino` (`TG_MAN_CALIBRATION`), `Serial.ino` (cal offset 155 / PW 162 echo) |
+| `INPUT_CAL_STAGE_IS_440` / `IS_PW_EDIT` | 440 = sub 2 | 440 and A's pulse-PW | offset encoder: 159 vs 162 vs 153 |
 | `struct InputWaveKey { osc, wave }` | — | — | the `inputWaveKeys` table below |
 | `INPUT_WAVE_KEY_COUNT` | 5 | 5 | `LED_control.ino` refresh loop |
 | `inputWaveKeys[5]` | OSC1 saw, OSC2 pulse, OSC1 tri, OSC1 pulse, OSC3 pulse | OSC A saw, OSC A pulse, OSC A tri, OSC B saw, OSC B pulse | `buttons.ino` (`toggle_wave_key`), `LED_control.ino` (`set_LED_Status(16, …)`) |
+| `SMPS_PS_PIN` / `USER_KEY_PIN` | from `DCO_MCU_BOARD` (Pico: GP23 HIGH; WeAct: KEY GP23) | same | pin maps only; not driven (see [`PANEL_AND_PINS.md`](PANEL_AND_PINS.md)) |
 
 **Functions** (inline in header)
 - `input_wave_key_param_id(osc, wave)` — Map one wave key to its `waveEnable` ParamId: `PARAM_OSC1_SAW_ENABLE + wave` for oscillator 0, otherwise `PARAM_OSC2_SAW_ENABLE + (osc - 1) * 3 + wave`.
@@ -201,6 +202,7 @@ Outbound slim frames on both links via `serial_frame_write`; inbound `'x'`, pers
   - **Called from:** `encoders.ino`; `Controls.ino` legacy save path (dead caller).
   - **When:** Save-name UI; `#ifdef ENABLE_SCREEN_LINK`.
 - `serialSendParamByteToScreen(byte, byte)` — slim `'y'` `[id][u8]` on `SCREEN_PORT`.
+- `input_send_manual_cal_stage()` — send stage 152 plus offset 153 (saw/pulse) or amp-440 159 to DCO and Screen.
   - **Called from:** `input_handle_param32_from_dco`; `encoders.ino` (manual cal); `buttons.ino` (manual cal).
   - **When:** Screen-only UI params / cal offset echo.
 - `serial_forward_param32_to_screen(const uint8_t*, uint8_t)` — Relay slim `'x'` (5 B) to `SCREEN_PORT` (`static`).
@@ -352,38 +354,52 @@ Debounce mux buttons; dispatch wave/LFO/preset/manual/calibration actions; seria
 - `toggle_wave_key(uint8_t key)` — Flip one of the five panel wave keys: read `inputWaveKeys[key]`, invert `waveEnable[osc][wave]`, send the new state as a byte param on the ParamId from `input_wave_key_param_id()`, and set the matching LED. The key index is also the LED index, so `set_LED_Status(key, …)` needs no translation (`static`).
   - **Called from:** the `TG_SAW1` / `TG_SQR1` / `TG_TRI` / `TG_SAW2` / `TG_SQR2` cases of `read_encoder_buttons`, with keys 0..4; those cases contain nothing else now.
   - **When:** Each wave-key press. Which oscillator a key drives is per-panel, so this is the only place the mapping is applied.
-- `read_encoder_buttons()` — Update all buttons; mode machines; large action `switch` (param TX, LEDs, presets, cal). `TG_ADSR3_TO_OSC_SELECT` wraps at `INPUT_ADSR3_TO_OSC_SELECT_MAX`, and `TG_MAN_CALIBRATION` resets `manualCalibrationStage` to 0 and reports stage plus `manualCalibrationInitAmpCompOffset[INPUT_CAL_STAGE_TO_OSC(stage)]` to the DCO and the Screen. `TG_SIN` is an empty case: neither panel has a sine key.
+- `read_encoder_buttons()` — Update all buttons; resolve a `ButtonAction` per event (NORMAL mode via the `handle*Button()` helpers, other modes via the menu columns + `handle_mode_buttons()`), run the first-press selection tracking, then call `execute_button_action()`.
   - **Called from:** `readControls()` when `timer99microsFlag`.
-  - **When:** Soft timer Core0 ~99 µs.
-- `handleLatchedButton(int)` — Latch LED blink for buttons 0–6.
+  - **When:** Soft timer Core0 ~99 µs.
+- `execute_button_action(ButtonAction)` — The action `switch` (param TX, LEDs, presets, cal). `TG_ADSR3_TO_OSC_SELECT` wraps at `INPUT_ADSR3_TO_OSC_SELECT_MAX`, and `TG_MAN_CALIBRATION` resets `manualCalibrationStage` to 0, announces topology, and calls `input_send_manual_cal_stage()`. `TG_SIN` is an empty case: neither panel has a sine key (`static`).
+  - **Called from:** `read_encoder_buttons`, once per button per scan.
+- `handle_mode_buttons(ButtonAction)` — EXIT/BACK/SELECT/CONFIRM handling for `MANUAL_CALIBRATION` and `CALIBRATION_MENU`; consumes the action or maps a `calibrationMenu[]` entry (`{calibrationFlag, followUp}` table in `menuPos` order, size defines `CALIBRATION_MENU_POS_MAX`) to `PARAM_CALIBRATION_FLAG` / `TG_MAN_CALIBRATION` (`static`).
+  - **Called from:** `read_encoder_buttons` (non-NORMAL modes).
+- `exit_manual_calibration(controlMode)` — Leave manual calibration (clear + send `PARAM_MANUAL_CALIBRATION_FLAG`); the `returnTo` arg picks `CALIBRATION_MENU` (EXIT/BACK) or `NORMAL` (CONFIRM) (`static`).
+  - **Called from:** `handle_mode_buttons`.
+- `save_flow_enter_select()` / `save_flow_cancel()` / `save_flow_enter_name_edit()` / `save_flow_commit()` — The `saveFlow` state machine transitions (Screen signals, `request_preset_directory()`, `preset_save_to_board()`, name restore on cancel). See [`PRESETS.md`](PRESETS.md) (`static`).
+  - **Called from:** the `PRESET_SAVE_SELECT_MODE` / `SAVE_PRESET` cases of `execute_button_action`.
+- `handleLatchedButton(int)` — Latch LED blink for buttons 0–`LATCHABLE_BUTTON_MAX`.
   - **Called from:** `read_encoder_buttons`.
   - **When:** Button latch event.
-- `handleHeldButton(int)` — Select held action (func alt).
+- `handleHeldButton(int)` — Return held action (func alt).
   - **Called from:** `read_encoder_buttons`.
   - **When:** Button held.
-- `handleDoublePressedButton(int)` — Select double-press action.
+- `handleDoublePressedButton(int)` — Return double-press action.
   - **Called from:** `read_encoder_buttons`.
   - **When:** Double press.
-- `handlePressedButton(int)` — Select pressed action.
+- `handlePressedButton(int)` — Return pressed action.
   - **Called from:** `read_encoder_buttons`.
   - **When:** Press.
-- `handleReleasedButton(int)` — Unlatch LEDs + released action.
+- `handleReleasedButton(int)` — Unlatch LEDs + return released action.
   - **Called from:** `read_encoder_buttons`.
   - **When:** Release.
-- `handleUnlatchedButton(int)` — Clear latch LEDs via `set_LED_Status(16, 0)`.
+- `handleUnlatchedButton(int)` — Clear latch LEDs via `set_LED_Status(LED_REFRESH_ALL, 0)`.
   - **Called from:** `read_encoder_buttons`.
   - **When:** Unlatch.
 
 ### `encoders.h`
 
-Encoder action enums and `encoders[]` / calibration/menu action tables. The three OSC3 slots go through the `ENC_OSC3_INTERVAL` / `ENC_OSC3_DETUNE` / `ENC_LFO2_TO_OSC3` macros, which resolve to the real actions when `INPUT_HAS_OSC3_PANEL` and to `ACTION_NONE` otherwise: enc3 `action3` and `actionAlt2` are OSC3 interval, enc5 `action3` is OSC3 detune, and enc5 `actionAlt3` is LFO2→OSC3, so on DCO4 those positions do nothing. **No function definitions.**
+Encoder action enums, the `EncoderParamBinding` struct (generic value-knob rows: bound global, type tag, min/max, `baseStep` + `speedMultX2` step math, ParamId, byte/word/offset flags), and `encoders[]` / calibration/menu action tables (`static_assert`ed to `NUM_ENCODERS` entries). Each `EncoderStruct` holds two 3-slot banks, `actions[]` (NORMAL: plain / latched-or-name-edit / reserved) and `actionsAlt[]` (FUNC: plain / latched-or-slot-select / curve-select). The three OSC3 slots go through the `ENC_OSC3_INTERVAL` / `ENC_OSC3_DETUNE` / `ENC_LFO2_TO_OSC3` macros, which resolve to the real actions when `INPUT_HAS_OSC3_PANEL` and to `ACTION_NONE` otherwise: enc3 `actions[2]` and `actionsAlt[1]` are OSC3 interval, enc5 `actions[2]` is OSC3 detune, and enc5 `actionsAlt[2]` is LFO2→OSC3, so on DCO4 those positions do nothing. **No function definitions.**
 
 ### `encoders.ino`
 
+Holds `encoderParamBindings[]`, the value-knob table (non-const so it lives in RAM with the hot path): one row per plain parameter action, replacing the old per-action `switch` cases. Special actions (ADSR curves, preset select/name, calibration, menu position) keep explicit cases in `read_encoders()`.
+
 **Functions**
-- `read_encoders()` — Read 11 encoders; apply action tables; `serial_send_param_change(_byte)`, preset scroll/load, manual-cal offsets, menu position. `ACTION_CALIBRATION_STAGE` clamps to `INPUT_CAL_STAGE_MAX` and `ACTION_CALIBRATION_OFFSET` clamps the offset to ±20; both resolve the oscillator with `INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage)`, so the staging follows the model: DCO3 walks two stages per oscillator (saw, then pulse) for 6 stages, DCO4 one stage per oscillator for 8.
+- `read_encoders()` — Read 11 encoders; on each detent, `resolve_encoder_action()` picks the action, `encoder_apply_binding()` handles table-bound params, and the remaining `switch` covers the special actions (preset scroll/load, manual-cal offsets / amp-440 / PW-center, menu position, ADSR curves). `ACTION_CALIBRATION_STAGE` clamps to `INPUT_CAL_STAGE_MAX` (DCO3 8, DCO4 27) and calls `input_send_manual_cal_stage()`. `ACTION_CALIBRATION_OFFSET` sends param **153** ±20 on saw/tri/pulse, **162** (PW_CENTER, step `1 + speed`) on DCO4 A's pulse-PW substage, and **159** (amp @ 440, same step) on 440 Hz substages. Oscillator is `INPUT_CAL_STAGE_TO_OSC`. DCO3 walks saw → pulse → 440 (9 stages); DCO4 packs A4+B3 per voice (28 stages).
   - **Called from:** `readControls()` when `timer99microsFlag`.
   - **When:** Soft timer Core0 ~99 µs.
+- `resolve_encoder_action(const EncoderStruct&, int)` — Map a detent to an `EncoderAction` for the current `controlMode` (NORMAL picks a bank slot from `saveFlow` / curve-select / FUNC / latch state and runs the first-detent selection tracking; other modes read `manualCalibrationActions[]` / `menuNavigationActions[]`) (`static`).
+  - **Called from:** `read_encoders`.
+- `encoder_apply_binding(EncoderAction, uint8_t, uint16_t)` — Generic value-knob handler: integer step `baseStep + (speedMultX2 * speed) / 2` (both directions symmetric), clamp, write back through the type tag, send byte/word param (with optional +512 offset). Returns false when the action has no table row (`static`).
+  - **Called from:** `read_encoders`.
 
 ### `LED_control.h`
 

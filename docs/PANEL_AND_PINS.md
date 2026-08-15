@@ -11,9 +11,9 @@ the **UART assignment**, the **GP5 LED-PWM question**, the **wave-key wiring** a
 ## UART
 
 The two PCBs swap which UART faces which peer, so the peer can **never** be inferred from the port
-number. The code only ever names the `DCO_PORT` and `SCREEN_PORT` aliases from `Serial.h`, which
-expand to `INPUT_DCO_PORT_OBJ` / `INPUT_SCREEN_PORT_OBJ` in `board_model.h`. `DCO_PORT` is the
-panel's outbound data link on both models; on DCO4 it reaches the DCO through the Mainboard.
+number. The code names `DCO_PORT` (outbound), `DCO_RX_PORT` (inbound), and `SCREEN_PORT` from
+`Serial.h`. On DCO3 those first two are the same UART. On DCO4 `DCO_PORT` is Serial2 TX to the
+Mainboard and `DCO_RX_PORT` is Serial1 GP1 from the Mainboard (same UART as Screen TX).
 
 ### DCO3-MONOSYNTH (`INPUT_BOARD_MODEL` = `INPUT_BOARD_DCO3`)
 
@@ -31,18 +31,26 @@ GP5 has no conductor on this PCB and the Screen never transmits, so the pin is r
 | Port | Alias | Pins | Baud | Peer |
 |------|-------|------|------|------|
 | `Serial` | — | USB | 2 000 000 | Debug (`ENABLE_SERIAL`, commented out by default) |
-| `Serial2` | `DCO_PORT` | TX **GP4** → Mainboard PE0, RX **GP5** ← Mainboard PE1 | 2 500 000 | STM32 Mainboard, which relays these frames on to the DCO and the DCO's replies back |
-| `Serial1` | `SCREEN_PORT` | TX **GP0** → Screen GP13; RX **GP1** unwired | 2 500 000 | Screen — the same UI frames as on DCO3, TX only |
+| `Serial2` | `DCO_PORT` | TX **GP4** → Mainboard PE0; RX unused | 2 500 000 | STM32 Mainboard outbound (`'a'`–`'d'` / `'p'` / `'q'` / `'N'`) |
+| `Serial1` | `SCREEN_PORT` / `DCO_RX_PORT` | TX **GP0** → Screen GP13; RX **GP1** ← Mainboard PE1 | 2 500 000 | Screen TX, and Mainboard inbound (`'p'`/`'x'`/`'a'`–`'d'`/`'O'`/`'L'`) |
 
-**Warning: never drive GP5 on DCO4.** GP5 is the Mainboard RX pad here, so `INPUT_HAS_LED_PWM` is
-0 and the `analogWrite(PIN_LED_PWM, …)` in `setup1()` is not compiled; LED brightness is fixed on
-this instrument. Driving GP5 would kill everything inbound: the gap relay, the calibration
-offsets, the persistable `'p'` mirror, the `'d'` filter block and the `'O'`/`'L'` preset directory
-traffic.
+Inbound is **GP1**, not GP5. `INPUT_HAS_LED_PWM` stays 0; do not drive GP5 as PWM.
 
 Both links run at 2 500 000 baud on either model, with FIFO 512 and IRQ mode
 (`setPollingMode(false)`). They are brought up in `setup1()` from `INPUT_DCO_RX_PIN`,
 `INPUT_DCO_TX_PIN`, `INPUT_SCREEN_RX_PIN` and `INPUT_SCREEN_TX_PIN`.
+
+---
+
+## MCU module (`DCO_MCU_BOARD`)
+
+Same flag as the DCO, from the superproject `project_config.h`. Panel mux/UART pins do **not**
+use GPIO 23 or 24 (mux **channel** 23 on button9 is not GPIO 23). Analog SIG is GP27.
+
+| `DCO_MCU_BOARD` | GP23 | GP24 |
+|-----------------|------|------|
+| WeAct RP2040 | Onboard KEY, `INPUT_PULLUP`. Press toggles FUNC (`PARAM_FUNCTION_KEY`) | Unused (DCO analog board-fix only) |
+| Pico / Pico 2 | `SMPS_PS_PIN` OUT HIGH (RT6150 PWM; quieter 3.3 V for the GP27 ADC) | VBUS sense — not driven |
 
 ---
 
@@ -139,21 +147,22 @@ and 2 on DCO4 (A / B / A+B).
 
 ## Manual calibration staging (per model)
 
-Manual calibration walks the oscillators one stage at a time. `INPUT_CAL_STAGE_MAX` bounds the
-stage encoder and `INPUT_CAL_STAGE_TO_OSC(stage)` turns a stage into the oscillator index used for
-`manualCalibrationInitAmpCompOffset[]`:
+DCO3 walks **saw → pulse → 440 Hz** on every oscillator (`stage = osc × 3 + sub`, 9 stages, max 8).
+DCO4 packs **7 stages per voice pair** (28 stages, max 27): A saw / tri / pulse-PW / 440, B saw / pulse / 440.
+`INPUT_CAL_STAGE_MAX` bounds the stage encoder; `INPUT_CAL_STAGE_TO_OSC(stage)` (`cal_stage_to_osc_n`)
+turns a stage into the oscillator index used for offsets / `manualAmpComp440[]` / `manualPwCenter[]`:
 
 | | DCO3 | DCO4 |
 |---|------|------|
 | Oscillators (`NUM_OSCILLATORS`) | 3 | 8 |
-| `INPUT_CAL_STAGES_PER_OSC` | 2 (sawtooth, then pulse) | 1 |
-| Stage count / `INPUT_CAL_STAGE_MAX` | 6 stages, max 5 | 8 stages, max 7 |
-| `INPUT_CAL_STAGE_TO_OSC(stage)` | `stage / 2` | `stage` |
+| Stage walk | uniform 3 | packed A4+B3 |
+| Stage count / `INPUT_CAL_STAGE_MAX` | 9 stages, max 8 | 28 stages, max 27 |
+| `INPUT_CAL_STAGE_TO_OSC(stage)` | `cal_stage_to_osc_n` | packed A4+B3 |
 
-The monosynth splits each oscillator in two because its waveforms are switched independently in
-the analog path. The stage encoder lives in `encoders.ino` (`ACTION_CALIBRATION_STAGE`), the offset
-encoder next to it (`ACTION_CALIBRATION_OFFSET`, clamped to ±20), and entry is
-`TG_MAN_CALIBRATION` in `buttons.ino`.
+The stage encoder lives in `encoders.ino` (`ACTION_CALIBRATION_STAGE`) and calls
+`input_send_manual_cal_stage()`. The offset encoder next to it (`ACTION_CALIBRATION_OFFSET`) sends
+param **153** (offset ±20) on saw/tri/pulse, **162** (PW_CENTER, 0..1023) on DCO4 A's pulse-PW
+substage, and param **159** (amp @ 440) on 440 Hz substages. Entry is `TG_MAN_CALIBRATION` in `buttons.ino`.
 
 ---
 
@@ -172,7 +181,7 @@ mirror the manual pot/fader flags. Refresh: `LED_Control_Mux.update()` on Core1 
 **Note:** brightness is not implemented in hardware. On DCO3 `setup1()` parks GP5 at a fixed
 `analogWrite(245)` and nothing varies it afterwards; because that call runs after the UART begin,
 GP5 stops being `SCREEN_PORT` RX, which costs nothing since the pin has no conductor and the
-Screen never transmits. On DCO4 the whole block is compiled out — see the GP5 warning above.
+Screen never transmits. On DCO4 inbound is GP1 and the PWM block stays compiled out.
 
 ---
 

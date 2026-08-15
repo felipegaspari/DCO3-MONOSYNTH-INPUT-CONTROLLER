@@ -21,10 +21,10 @@ void __not_in_flash_func(serial_send_manual_controls)(bool presetLoading) {
                  ADSR1_attack, ADSR1_decay, ADSR1_sustain, ADSR1_release);
 
 #ifdef ENABLE_DCO_LINK
-    serial_frame_write(DCO_PORT, INPUT_CMD_ADSR1_BLOCK, dataArrayDCO, INPUT_SERIAL_LEN_ADSR_BLOCK);
+    serial_frame_write(DcoDma, INPUT_CMD_ADSR1_BLOCK, dataArrayDCO, INPUT_SERIAL_LEN_ADSR_BLOCK);
 #endif
 #ifdef ENABLE_SCREEN_LINK
-    serial_frame_write(SCREEN_PORT, INPUT_CMD_ADSR1_BLOCK, dataArrayScreen, INPUT_SERIAL_LEN_ADSR_BLOCK);
+    serial_frame_write(ScreenDma, INPUT_CMD_ADSR1_BLOCK, dataArrayScreen, INPUT_SERIAL_LEN_ADSR_BLOCK);
 #endif
   }
 
@@ -42,10 +42,10 @@ void __not_in_flash_func(serial_send_manual_controls)(bool presetLoading) {
                  ADSR2_attack, ADSR2_decay, ADSR2_sustain, ADSR2_release);
 
 #ifdef ENABLE_DCO_LINK
-    serial_frame_write(DCO_PORT, INPUT_CMD_ADSR2_BLOCK, dataArrayDCO, INPUT_SERIAL_LEN_ADSR_BLOCK);
+    serial_frame_write(DcoDma, INPUT_CMD_ADSR2_BLOCK, dataArrayDCO, INPUT_SERIAL_LEN_ADSR_BLOCK);
 #endif
 #ifdef ENABLE_SCREEN_LINK
-    serial_frame_write(SCREEN_PORT, INPUT_CMD_ADSR2_BLOCK, dataArrayScreen, INPUT_SERIAL_LEN_ADSR_BLOCK);
+    serial_frame_write(ScreenDma, INPUT_CMD_ADSR2_BLOCK, dataArrayScreen, INPUT_SERIAL_LEN_ADSR_BLOCK);
 #endif
   }
 
@@ -58,7 +58,7 @@ void __not_in_flash_func(serial_send_manual_controls)(bool presetLoading) {
                  ADSR3_attack_serial, ADSR3_decay_serial,
                  ADSR3_sustain, ADSR3_release_serial);
 #ifdef ENABLE_DCO_LINK
-    serial_frame_write(DCO_PORT, INPUT_CMD_ADSR3_BLOCK, dataArray, INPUT_SERIAL_LEN_ADSR_BLOCK);
+    serial_frame_write(DcoDma, INPUT_CMD_ADSR3_BLOCK, dataArray, INPUT_SERIAL_LEN_ADSR_BLOCK);
 #endif
   }
 
@@ -67,7 +67,7 @@ void __not_in_flash_func(serial_send_manual_controls)(bool presetLoading) {
     pack_u16_le4(dataArray, CUTOFF, RESONANCE,
                  (uint16_t)ADSR2toVCF, LFO2toVCF);
 #ifdef ENABLE_DCO_LINK
-    serial_frame_write(DCO_PORT, INPUT_CMD_FILTER_BLOCK, dataArray, INPUT_SERIAL_LEN_FILTER_BLOCK);
+    serial_frame_write(DcoDma, INPUT_CMD_FILTER_BLOCK, dataArray, INPUT_SERIAL_LEN_FILTER_BLOCK);
 #endif
   }
 
@@ -75,7 +75,7 @@ void __not_in_flash_func(serial_send_manual_controls)(bool presetLoading) {
 #ifdef ENABLE_DCO_LINK
     uint8_t p[INPUT_SERIAL_LEN_PARAM_16];
     encode_param_p(p, (uint8_t)ParamId::PARAM_ADSR1_TO_VCA, (int16_t)ADSR1toVCA);
-    serial_frame_write(DCO_PORT, INPUT_CMD_PARAM_16, p, INPUT_SERIAL_LEN_PARAM_16);
+    serial_frame_write(DcoDma, INPUT_CMD_PARAM_16, p, INPUT_SERIAL_LEN_PARAM_16);
 #endif
   }
 
@@ -83,7 +83,7 @@ void __not_in_flash_func(serial_send_manual_controls)(bool presetLoading) {
 #ifdef ENABLE_DCO_LINK
     uint8_t p[INPUT_SERIAL_LEN_PARAM_16];
     encode_param_p(p, (uint8_t)ParamId::PARAM_PW_VALUE, (int16_t)PW);
-    serial_frame_write(DCO_PORT, INPUT_CMD_PARAM_16, p, INPUT_SERIAL_LEN_PARAM_16);
+    serial_frame_write(DcoDma, INPUT_CMD_PARAM_16, p, INPUT_SERIAL_LEN_PARAM_16);
 #endif
   }
 }

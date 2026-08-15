@@ -69,9 +69,12 @@ void setup1() {
   Serial.begin(2000000);
 #endif
 #ifdef ENABLE_DCO_LINK
-  // DCO3: straight to the DCO. DCO4: to the Mainboard, which relays to the DCO.
-  DCO_PORT.setRX(INPUT_DCO_RX_PIN);
+  // DCO3: Serial1 TX+RX to the DCO. DCO4: Serial2 TX GP4 to the Mainboard;
+  // inbound is Serial1 GP1 (DCO_RX_PORT), begun with SCREEN_PORT below.
   DCO_PORT.setTX(INPUT_DCO_TX_PIN);
+#if INPUT_IS_DCO3
+  DCO_PORT.setRX(INPUT_DCO_RX_PIN);
+#endif
   DCO_PORT.setPollingMode(false);
   DCO_PORT.setFIFOSize(512);
   DCO_PORT.begin(2500000);
@@ -79,12 +82,15 @@ void setup1() {
 #endif
 
 #ifdef ENABLE_SCREEN_LINK
-  // TX only; the Screen never transmits back.
+  // DCO3: TX only. DCO4: TX to Screen on GP0, RX from Mainboard on GP1.
   SCREEN_PORT.setRX(INPUT_SCREEN_RX_PIN);
   SCREEN_PORT.setTX(INPUT_SCREEN_TX_PIN);
   SCREEN_PORT.setPollingMode(false);
   SCREEN_PORT.setFIFOSize(512);
   SCREEN_PORT.begin(2500000);
+#endif
+  serial_dma_init();
+#ifdef ENABLE_SCREEN_LINK
   // Let the Screen learn which synth it's attached to (3 vs 8 oscillators)
   // without a per-project build flag; screen_target.h derives its whole
   // calibration UI from this one value. Silent: 157 is outside the 150..155
@@ -117,6 +123,7 @@ void __not_in_flash_func(loop1)() {
   // Drain inbound frames before any panel TX so a blocked DCO_PORT write cannot
   // let the Mainboard mirror backlog overflow the RX FIFO.
   serial_read_from_dco();
+  serial_dma_poll();
 
   unsigned long loopStartMicros = micros();
 
@@ -129,7 +136,7 @@ void __not_in_flash_func(loop1)() {
 
   if (ledRefreshPending) {
     ledRefreshPending = false;
-    set_LED_Status(16, 0);
+    set_LED_Status(LED_REFRESH_ALL, 0);
   }
 
   if (timer31msFlag2) {
@@ -159,14 +166,9 @@ void __not_in_flash_func(loop)() {
 
   // loopStartTime = micros();
 
-  // RANDOMNESS1 = (float)random1 / 1440000 * randomnessIntensity1;
-  // RANDOMNESS2 = random2 * randomnessIntensity2;
-
   millisTimer();
 
   readControls();
-
-
 
   // uint32_t j = micros();
 

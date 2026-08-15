@@ -65,16 +65,18 @@
 // --- serial links --------------------------------------------------------------
 //
 // The two PCBs swap which UART faces which peer, so never infer the peer from
-// the port number. DCO_PORT is the name the panel TX path uses in both cases;
-// on DCO4 it reaches the DCO through the Mainboard.
+// the port number. DCO_PORT is the panel TX path in both cases; on DCO4 it
+// reaches the DCO through the Mainboard. DCO4 inbound is a different UART:
+// Serial1 GP1 (same UART as Screen TX; the Screen never transmits).
 //
 //   DCO3: Serial1 TX GP0 -> DCO GP21       | RX GP1 <- DCO GP20
 //         Serial2 TX GP4 -> Screen GP13    | RX GP5 unwired (Screen never TX)
-//   DCO4: Serial2 TX GP4 -> Mainboard PE0  | RX GP5 <- Mainboard PE1
-//         Serial1 TX GP0 -> Screen GP13    | RX GP1 unwired
+//   DCO4: Serial2 TX GP4 -> Mainboard PE0  | RX unused (do not listen on GP5)
+//         Serial1 TX GP0 -> Screen GP13    | RX GP1 <- Mainboard PE1
 
 #if INPUT_IS_DCO3
 #define INPUT_DCO_PORT_OBJ    Serial1
+#define INPUT_DCO_RX_PORT_OBJ Serial1
 #define INPUT_DCO_RX_PIN      1
 #define INPUT_DCO_TX_PIN      0
 #define INPUT_SCREEN_PORT_OBJ Serial2
@@ -85,12 +87,13 @@
 #define INPUT_HAS_LED_PWM 1
 #else
 #define INPUT_DCO_PORT_OBJ    Serial2
-#define INPUT_DCO_RX_PIN      5
+#define INPUT_DCO_RX_PORT_OBJ Serial1
+#define INPUT_DCO_RX_PIN      1
 #define INPUT_DCO_TX_PIN      4
 #define INPUT_SCREEN_PORT_OBJ Serial1
 #define INPUT_SCREEN_RX_PIN   1
 #define INPUT_SCREEN_TX_PIN   0
-// GP5 is the Mainboard RX pad here — never drive it. LED brightness is fixed.
+// GP5 is not the Mainboard RX pad here (that is GP1). Leave PWM off.
 #define INPUT_HAS_LED_PWM 0
 #endif
 
@@ -114,16 +117,12 @@
 #define INPUT_DEFAULT_VOICE_MODE 1  // poly, matching the DCO default
 #endif
 
-// Manual calibration walks the oscillators one stage at a time. The monosynth
-// splits each oscillator into two stages (sawtooth, then pulse) because its
-// waveforms are switched independently in the analog path.
-#if INPUT_IS_DCO3
-#define INPUT_CAL_STAGES_PER_OSC 2
-#else
-#define INPUT_CAL_STAGES_PER_OSC 1
-#endif
-#define INPUT_CAL_STAGE_MAX ((NUM_OSCILLATORS * INPUT_CAL_STAGES_PER_OSC) - 1)
-#define INPUT_CAL_STAGE_TO_OSC(stage) ((uint8_t)((stage) / INPUT_CAL_STAGES_PER_OSC))
+// Manual calibration: DCO3 0..8 (3×3); DCO4 0..27 (packed A4+B3 per voice).
+#define INPUT_CAL_STAGE_MAX (cal_stage_max_n(NUM_OSCILLATORS))
+#define INPUT_CAL_STAGE_TO_OSC(stage) cal_stage_to_osc_n((uint8_t)(stage), NUM_OSCILLATORS)
+#define INPUT_CAL_STAGE_IS_440(stage) cal_stage_is_440_n((uint8_t)(stage), NUM_OSCILLATORS)
+#define INPUT_CAL_STAGE_IS_PW_EDIT(stage) cal_stage_is_pw_edit_n((uint8_t)(stage), NUM_OSCILLATORS)
+#define INPUT_CAL_PW_CH(osc) ((NUM_VOICES == NUM_OSCILLATORS) ? (uint8_t)(osc) : (uint8_t)((osc) / 2u))
 
 // The five physical wave keys, in LED order (LED 0..4 = TG_SAW1, TG_SQR1,
 // TG_TRI, TG_SAW2, TG_SQR2). The two panels silkscreen the same keys but wire
@@ -153,5 +152,24 @@ static inline uint8_t input_wave_key_param_id(uint8_t osc, uint8_t wave) {
            ? (uint8_t)((uint8_t)ParamId::PARAM_OSC1_SAW_ENABLE + wave)
            : (uint8_t)((uint8_t)ParamId::PARAM_OSC2_SAW_ENABLE + (osc - 1) * 3 + wave);
 }
+
+// MCU module GP23/24 (same DCO_MCU_BOARD as the DCO). Input firmware does not
+// use those GPIOs for the panel — mux channel 23 on button9 is not GPIO 23.
+// Pico/Pico 2: drive SMPS PS high (quieter 3V3 for the GP27 analog mux).
+// WeAct: GP23 is the onboard KEY (FUNC toggle); GP24 is unused here (DCO analog
+// board-fix only).
+static constexpr uint8_t MCU_PIN_UNASSIGNED = 0xFF;
+#if defined(DCO_MCU_BOARD) && DCO_MCU_BOARD == DCO_MCU_WEACT_RP2040
+static constexpr uint8_t SMPS_PS_PIN = MCU_PIN_UNASSIGNED;
+static constexpr uint8_t USER_KEY_PIN = 23;
+#elif defined(DCO_MCU_BOARD) && ((DCO_MCU_BOARD == DCO_MCU_PICO) || (DCO_MCU_BOARD == DCO_MCU_PICO2))
+static constexpr uint8_t SMPS_PS_PIN = 23;
+static constexpr uint8_t USER_KEY_PIN = MCU_PIN_UNASSIGNED;
+#elif defined(DCO_MCU_BOARD)
+#error "DCO_MCU_BOARD must be DCO_MCU_WEACT_RP2040, DCO_MCU_PICO, or DCO_MCU_PICO2"
+#else
+static constexpr uint8_t SMPS_PS_PIN = MCU_PIN_UNASSIGNED;
+static constexpr uint8_t USER_KEY_PIN = MCU_PIN_UNASSIGNED;
+#endif
 
 #endif  // BOARD_MODEL_H

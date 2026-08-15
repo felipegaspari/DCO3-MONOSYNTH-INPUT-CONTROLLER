@@ -23,8 +23,10 @@ byte noiseLevel = 0;
 int16_t calibrationVal;
 //
 bool manualCalibration = false;
-int8_t manualCalibrationStage = 0;
 int8_t manualCalibrationInitAmpCompOffset[NUM_OSCILLATORS] = { 0 };
+uint8_t manualCalibrationStage = 0;
+uint16_t manualAmpComp440[NUM_OSCILLATORS] = { 0 };
+uint16_t manualPwCenter[NUM_VOICES] = { 0 };
 
 int8_t velocityToVCF = 0;
 int8_t velocityToVCA = 0;

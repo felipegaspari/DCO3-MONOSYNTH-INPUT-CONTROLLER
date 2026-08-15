@@ -17,6 +17,7 @@
 #include "buttons.h"
 #include "encoders.h"
 #include "Controls.h"
+#include "menus.h"
 
 
 #include "formulas.h"

@@ -8,10 +8,10 @@ void init_LED_control() {
   LED_Control_Mux.allOff();
 }
 
-// Update one LED or (LEDNumber==16) refresh all from wave/manual status flags.
+// Update one LED or (LEDNumber==LED_REFRESH_ALL) refresh all from wave/manual status flags.
 void __not_in_flash_func(set_LED_Status)(byte LEDNumber, byte LEDStatus) {
 
-  if (LEDNumber == 16) {
+  if (LEDNumber == LED_REFRESH_ALL) {
 
     // LEDs 0..4 sit behind the five wave keys; which oscillator each one shows
     // is a per-panel fact (board_model.h).
@@ -30,7 +30,7 @@ void __not_in_flash_func(set_LED_Status)(byte LEDNumber, byte LEDStatus) {
     LEDState[14] = 0;
     LEDState[15] = 0;
 
-    update_LED_Control(16, 0);
+    update_LED_Control(LED_REFRESH_ALL, 0);
 
   } else {
     LEDState[LEDNumber] = LEDStatus;
@@ -41,7 +41,7 @@ void __not_in_flash_func(set_LED_Status)(byte LEDNumber, byte LEDStatus) {
 // Write LEDState[] to the 595 mux pins (call update separately on timer).
 void __not_in_flash_func(update_LED_Control)(byte LEDnumber, byte LEDStatus) {
 
-  if (LEDnumber == 16) {
+  if (LEDnumber == LED_REFRESH_ALL) {
 
     LED_Control_Mux.writePin(LEDPins[0], LEDState[0]);
     LED_Control_Mux.writePin(LEDPins[1], LEDState[1]);

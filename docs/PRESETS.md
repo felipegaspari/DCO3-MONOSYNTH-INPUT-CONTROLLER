@@ -90,15 +90,18 @@ dispatch.
 
 ## Panel UI
 
-Flags in [`Controls.h`](../Controls.h): `presetSaveSelectMode`, `presetSaveMode`,
-`presetSelectVal` (0..255), `currentPreset`, `presetNameVal[]` (name being
-edited). `presetName[]` (loaded name) lives in [`params.h`](../params.h).
+State in [`Controls.h`](../Controls.h): `saveFlow` (a `SaveFlow` enum —
+`IDLE` / `SELECT` / `NAME_EDIT` — replacing the old `presetSaveSelectMode` +
+`presetSaveMode` boolean pair), `presetSelectVal` (0..255), `currentPreset`,
+`presetNameVal[]` (name being edited). `presetName[]` (loaded name) lives in
+[`params.h`](../params.h). The transitions are the `save_flow_*()` helpers in
+[`buttons.ino`](../buttons.ino).
 
 ### Browse / load
 
 Encoder action `ACTION_select_preset` ([`encoders.ino`](../encoders.ino)):
 
-- **Normal play** (`!presetSaveSelectMode`): each encoder step updates
+- **Normal play** (`saveFlow == SaveFlow::IDLE`): each encoder step updates
   `presetSelectVal` (clamped `0..255`) and immediately calls
   **`preset_load_from_board(presetSelectVal)`** — sends `PARAM_PRESET_LOAD` to
   the DCO, updates the Screen from the local name cache right away, and the
@@ -127,25 +130,25 @@ stateDiagram-v2
   note right of Idle: preset_save_to_board + signal 5
 ```
 
-| Mode | Flags | Encoder | Commit |
-|------|-------|---------|--------|
-| Idle | both false | load on scroll | — |
-| Select slot | `presetSaveSelectMode`, `!presetSaveMode` | scroll name only (cache) | `SAVE_PRESET` → name edit |
-| Name edit | both true | `ACTION_select_char` / `_pos` edits `presetNameVal` | `SAVE_PRESET` → `preset_save_to_board(presetSelectVal)` |
+| Mode | `saveFlow` | Encoder | Commit |
+|------|-----------|---------|--------|
+| Idle | `SaveFlow::IDLE` | load on scroll | — |
+| Select slot | `SaveFlow::SELECT` | scroll name only (cache) | `SAVE_PRESET` → name edit |
+| Name edit | `SaveFlow::NAME_EDIT` | `ACTION_select_char` / `_pos` edits `presetNameVal` | `SAVE_PRESET` → `preset_save_to_board(presetSelectVal)` |
 
 Entering select mode also calls `request_preset_directory()` to refresh the
 cache, guarding against staleness if another peer (e.g. `dco_control`)
 renamed/saved a slot on the DCO since boot.
 
-Screen signals used by save UI:
+Screen signals used by save UI (named in `Serial.h`'s `ScreenSignal` enum):
 
-| Signal | Meaning |
-|--------|---------|
-| 3 | Enter save-select |
-| 4 | Enter name edit |
-| 5 | Preset saved |
-| 2 | Save cancelled / exit |
-| 6 / 1 | Screen silence during / after a preset-scroll TX |
+| Signal | Enum | Meaning |
+|--------|------|---------|
+| 3 | `SIGNAL_SAVE_SELECT_ENTER` | Enter save-select |
+| 4 | `SIGNAL_SAVE_NAME_EDIT` | Enter name edit |
+| 5 | `SIGNAL_PRESET_SAVED` | Preset saved |
+| 2 | `SIGNAL_SAVE_EXIT` | Save cancelled / exit |
+| 6 / 1 | `SIGNAL_SAVE_CHAR_SELECT` / `SIGNAL_PRESET_LOAD_SCROLL` | Screen silence during / after a preset-scroll TX |
 
 ---
 
@@ -158,8 +161,8 @@ DCO owns the record and applies it itself:
 2. Send `PARAM_PRESET_LOAD` (171) = slot to the DCO (`serial_send_param_change_byte`, DCO-only).
 3. Update `currentPreset` / `presetSelectVal` / `presetName[]` from the local
    `presetDir[slot]` cache (optimistic — no round trip needed for the Screen).
-4. `serial_send_preset_scroll()` + `serial_send_signal(1)` (same Screen update
-   the old `loadPreset()` sent at the end).
+4. `serial_send_preset_scroll()` + `serial_send_signal(SIGNAL_PRESET_LOAD_SCROLL)`
+   (same Screen update the old `loadPreset()` sent at the end).
 
 The DCO then applies the record (`preset_record_apply()`) and mirrors every
 captured persistable `'p'` id plus all four `'a'`–`'d'` blocks back over the

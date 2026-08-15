@@ -173,7 +173,7 @@ void read_encoder_buttons_preset_save() {
     //writePreset(presetSelectVal);
 
     currentPreset = presetSelectVal;
-    serial_send_signal(5);
+    serial_send_signal(SIGNAL_PRESET_SAVED);
     presetSaved = true;
     //  presetSave = false;
     presetCharPos = 0;
