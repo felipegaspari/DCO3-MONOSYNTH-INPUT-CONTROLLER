@@ -1,6 +1,14 @@
 #include "_build_libs/DCO-PROTOCOL/param_router.h"
 #include "params.h"
 
+int8_t   manualCalibrationInitAmpCompOffset[NUM_OSCILLATORS] = { 0 };
+uint16_t manualAmpComp440[NUM_OSCILLATORS]                   = { 0 };
+uint16_t manualPwCenter[NUM_VOICES]                          = { 0 };
+int16_t  ampCompDutyOffset[NUM_OSCILLATORS]                  = { 0 };
+uint8_t  manualCalibrationStage                              = 0;
+bool     manualCalibration                                   = false;
+
+
 // --- Wave Enables ---
 static void apply_param_osc1_saw(int16_t v)   { waveEnable[0][0] = (v != 0); ledRefreshPending = true; }
 static void apply_param_osc1_pulse(int16_t v) { waveEnable[0][1] = (v != 0); ledRefreshPending = true; }
@@ -86,27 +94,65 @@ static void apply_param_character(int16_t v)  { characterAmount = (uint8_t)const
 static void apply_param_pw_value(int16_t v)   { PW = (uint16_t)v; }
 
 // --- Calibration Echo Mirrors ---
+// =============================================================================
+// Calibration Parameter Appliers (In-RAM Mirrors)
+// =============================================================================
+
+static void apply_param_manual_calibration_flag(int16_t v) {
+  manualCalibration = (v != 0);
+}
+
+static void apply_param_manual_calibration_stage(int16_t v) {
+  manualCalibrationStage = (uint8_t)v;
+  uint8_t osc = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
+  uint8_t ch  = INPUT_CAL_PW_CH(osc);
+
+  // Pre-load encoder state to match the stored value for this stage
+  if (INPUT_CAL_STAGE_IS_440(manualCalibrationStage)) {
+    calibrationVal = (int16_t)manualAmpComp440[osc];
+  } else if (INPUT_CAL_STAGE_IS_PW_EDIT(manualCalibrationStage)) {
+    if (ch < NUM_VOICES) calibrationVal = (int16_t)manualPwCenter[ch];
+  } else {
+    calibrationVal = (int16_t)manualCalibrationInitAmpCompOffset[osc];
+  }
+}
+
+static void apply_param_manual_calibration_offset(int16_t v) {
+  uint8_t osc = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
+  if (osc < NUM_OSCILLATORS) {
+    manualCalibrationInitAmpCompOffset[osc] = (int8_t)v;
+    calibrationVal = (int16_t)(int8_t)v;
+  }
+}
+
 static void apply_param_amp_comp_440(int16_t v) {
   uint8_t osc = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
-  if (v <= 0) {
-    manualAmpComp440[osc] = 0;
-  } else {
-    int16_t amp = v;
-    if (amp < AMP_COMP_440_MIN) amp = AMP_COMP_440_MIN;
-    if (amp > AMP_COMP_440_MAX) amp = AMP_COMP_440_MAX;
-    manualAmpComp440[osc] = (uint16_t)amp;
+  if (osc < NUM_OSCILLATORS) {
+    manualAmpComp440[osc] = (uint16_t)v;
+    if (INPUT_CAL_STAGE_IS_440(manualCalibrationStage)) {
+      calibrationVal = v;
+    }
   }
 }
 
 static void apply_param_cal_pw_center(int16_t v) {
   uint8_t osc = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
-  uint8_t ch = INPUT_CAL_PW_CH(osc);
-  if (ch >= NUM_VOICES) ch = NUM_VOICES - 1;
-  int32_t pw = v;
-  if (pw < 0) pw = 0;
-  if (pw > CAL_PW_CENTER_MAX) pw = CAL_PW_CENTER_MAX;
-  manualPwCenter[ch] = (uint16_t)pw;
+  uint8_t ch  = INPUT_CAL_PW_CH(osc);
+  if (ch < NUM_VOICES) {
+    manualPwCenter[ch] = (uint16_t)v;
+    if (INPUT_CAL_STAGE_IS_PW_EDIT(manualCalibrationStage)) {
+      calibrationVal = v;
+    }
+  }
 }
+
+static void apply_param_amp_comp_duty_offset(int16_t v) {
+  uint8_t osc = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
+  if (osc < NUM_OSCILLATORS) {
+    ampCompDutyOffset[osc] = v;
+  }
+}
+
 
 // --- Mod Matrix Slots (0..7) ---
 #define MOD_SLOT_APPLIERS(N) \
@@ -206,6 +252,7 @@ static const ParamDescriptorT<int16_t> paramTable[] = {
 
   { PARAM_AMP_COMP_440,        apply_param_amp_comp_440 },
   { PARAM_CAL_PW_CENTER,       apply_param_cal_pw_center },
+  { PARAM_AMP_COMP_DUTY_OFFSET, apply_param_amp_comp_duty_offset },
 
   { PARAM_MOD_SLOT0_SOURCE, apply_param_mod_slot0_source },
   { PARAM_MOD_SLOT0_DEST,   apply_param_mod_slot0_dest },
@@ -231,6 +278,12 @@ static const ParamDescriptorT<int16_t> paramTable[] = {
   { PARAM_MOD_SLOT7_SOURCE, apply_param_mod_slot7_source },
   { PARAM_MOD_SLOT7_DEST,   apply_param_mod_slot7_dest },
   { PARAM_MOD_SLOT7_DEPTH,  apply_param_mod_slot7_depth },
+  { PARAM_MANUAL_CALIBRATION_FLAG,  apply_param_manual_calibration_flag },
+  { PARAM_MANUAL_CALIBRATION_STAGE, apply_param_manual_calibration_stage },
+  { PARAM_MANUAL_CALIBRATION_OFFSET,apply_param_manual_calibration_offset },
+  { PARAM_AMP_COMP_440,             apply_param_amp_comp_440 },
+  { PARAM_CAL_PW_CENTER,            apply_param_cal_pw_center },
+  { PARAM_AMP_COMP_DUTY_OFFSET,     apply_param_amp_comp_duty_offset },
 };
 
 static void (*inputParamJump[PARAM_ROUTER_JUMP_SIZE])(int16_t) = { nullptr };

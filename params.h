@@ -1,6 +1,13 @@
 #ifndef __PARAMS_H__
 #define __PARAMS_H__
 
+#include "_build_libs/DCO-PROTOCOL/serial_input_protocol.h"
+
+// Directory & Name RAM Buffers
+extern byte presetDir[PRESET_NUM_SLOTS][PRESET_NAME_LEN];
+extern byte presetNameVal[PRESET_NAME_LEN];
+extern byte presetName[PRESET_NAME_LEN + 1]; // +1 for null termination if needed
+
 byte noteStart[NUM_VOICES];
 byte noteEnd[NUM_VOICES];
 byte velocity[NUM_VOICES];
@@ -22,11 +29,12 @@ byte noiseLevel = 0;
 // encoder values
 int16_t calibrationVal;
 //
-bool manualCalibration = false;
-int8_t manualCalibrationInitAmpCompOffset[NUM_OSCILLATORS] = { 0 };
-uint8_t manualCalibrationStage = 0;
-uint16_t manualAmpComp440[NUM_OSCILLATORS] = { 0 };
-uint16_t manualPwCenter[NUM_VOICES] = { 0 };
+extern int8_t   manualCalibrationInitAmpCompOffset[NUM_OSCILLATORS];
+extern uint16_t manualAmpComp440[NUM_OSCILLATORS];
+extern uint16_t manualPwCenter[NUM_VOICES];
+extern int16_t  ampCompDutyOffset[NUM_OSCILLATORS];
+extern uint8_t  manualCalibrationStage;
+extern bool     manualCalibration;
 
 int8_t velocityToVCF = 0;
 int8_t velocityToVCA = 0;

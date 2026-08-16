@@ -4,12 +4,11 @@
 UartDmaTx DcoDma    = { 0 };
 UartDmaTx ScreenDma = { 1 };
 
-// Forward declarations from presetStorage.ino
 void input_handle_preset_dir_entry(char cmd, const uint8_t* payload, uint8_t len);
 void input_handle_preset_loaded(char, const uint8_t* payload, uint8_t);
 
 // =============================================================================
-// 1. DMA Initialization & Polling (RP2040)
+// 1. DMA Initialization & Polling
 // =============================================================================
 
 void serial_dma_init() {
@@ -28,7 +27,7 @@ void serial_dma_poll() {
 }
 
 // =============================================================================
-// 2. Outgoing Senders (Panel -> DCO / Mainboard / Screen)
+// 2. Outgoing Senders
 // =============================================================================
 
 static inline INPUT_ALWAYS_INLINE void pack_u16_le4(uint8_t* dst, uint16_t a, uint16_t b, uint16_t c, uint16_t d) {
@@ -93,8 +92,7 @@ static void input_send_param16_to_screen(uint8_t id, int16_t value) {
   encode_param_p(payload, id, value);
   serial_frame_write(ScreenDma, CMD_PARAM_16, payload, SERIAL_LEN_PARAM_16);
 #else
-  (void)id;
-  (void)value;
+  (void)id; (void)value;
 #endif
 }
 
@@ -105,68 +103,57 @@ void __not_in_flash_func(serialSendParamByteToScreen)(byte paramNumber, byte par
 void input_send_manual_cal_stage() {
   const uint8_t stage = (uint8_t)manualCalibrationStage;
   const uint8_t osc   = INPUT_CAL_STAGE_TO_OSC(stage);
-  serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_STAGE, stage, /*sendToAll=*/false);
+  const uint8_t ch    = INPUT_CAL_PW_CH(osc);
+
+  serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_STAGE, stage, false);
   serialSendParamByteToScreen(ParamId::PARAM_MANUAL_CALIBRATION_STAGE, stage);
+
   if (INPUT_CAL_STAGE_IS_440(stage)) {
-    if (manualAmpComp440[osc] != 0) {
-      input_send_param16_to_screen(ParamId::PARAM_AMP_COMP_440, (int16_t)manualAmpComp440[osc]);
-    }
+    calibrationVal = (int16_t)manualAmpComp440[osc];
+    input_send_param16_to_screen(ParamId::PARAM_AMP_COMP_440, (int16_t)manualAmpComp440[osc]);
   } else if (INPUT_CAL_STAGE_IS_PW_EDIT(stage)) {
-    uint8_t ch = INPUT_CAL_PW_CH(osc);
-    if (ch >= NUM_VOICES) ch = NUM_VOICES - 1;
-    if (manualPwCenter[ch] != 0) {
-      input_send_param16_to_screen(ParamId::PARAM_CAL_PW_CENTER, (int16_t)manualPwCenter[ch]);
-    }
+    uint8_t validCh = (ch < NUM_VOICES) ? ch : (NUM_VOICES - 1);
+    calibrationVal = (int16_t)manualPwCenter[validCh];
+    input_send_param16_to_screen(ParamId::PARAM_CAL_PW_CENTER, (int16_t)manualPwCenter[validCh]);
   } else {
+    calibrationVal = (int16_t)manualCalibrationInitAmpCompOffset[osc];
     serialSendParamByteToScreen(ParamId::PARAM_MANUAL_CALIBRATION_OFFSET, (uint8_t)manualCalibrationInitAmpCompOffset[osc]);
   }
 }
 
-// Full 1ms live stream to DCO/Mainboard; screen updates on change only to protect display FPS
+// Live continuous hardware control streaming
 void __not_in_flash_func(serial_send_manual_controls)(bool presetLoading) {
   // 1. ADSR 1 Faders
   if (faderRow1ControlManual || presetLoading) {
+    // Exponential block -> Mainboard / DCO
     uint8_t dataArrayDCO[SERIAL_LEN_ADSR_BLOCK];
     pack_u16_le4(dataArrayDCO, linToExpLookup[ADSR1_attack], linToExpLookup[ADSR1_decay], ADSR1_sustain, linToExpLookup[ADSR1_release]);
-
 #ifdef ENABLE_DCO_LINK
     serial_frame_write(DcoDma, CMD_ADSR1_BLOCK, dataArrayDCO, SERIAL_LEN_ADSR_BLOCK);
 #endif
 
+    // Linear bar graph block -> Direct to Screen
 #ifdef ENABLE_SCREEN_LINK
-    static uint16_t scr_a1_a = 0xFFFF, scr_a1_d = 0xFFFF, scr_a1_s = 0xFFFF, scr_a1_r = 0xFFFF;
-    if (presetLoading || ADSR1_attack != scr_a1_a || ADSR1_decay != scr_a1_d || 
-        ADSR1_sustain != scr_a1_s || ADSR1_release != scr_a1_r) {
-      scr_a1_a = ADSR1_attack; scr_a1_d = ADSR1_decay;
-      scr_a1_s = ADSR1_sustain; scr_a1_r = ADSR1_release;
-
-      uint8_t dataArrayScreen[SERIAL_LEN_ADSR_BLOCK];
-      pack_u16_le4(dataArrayScreen, ADSR1_attack, ADSR1_decay, ADSR1_sustain, ADSR1_release);
-      serial_frame_write(ScreenDma, CMD_ADSR1_BLOCK, dataArrayScreen, SERIAL_LEN_ADSR_BLOCK);
-    }
+    uint8_t dataArrayScreen[SERIAL_LEN_ADSR_BLOCK];
+    pack_u16_le4(dataArrayScreen, ADSR1_attack, ADSR1_decay, ADSR1_sustain, ADSR1_release);
+    serial_frame_write(ScreenDma, CMD_ADSR1_BLOCK, dataArrayScreen, SERIAL_LEN_ADSR_BLOCK);
 #endif
   }
 
   // 2. ADSR 2 / 3 Faders
   if ((faderRow2ControlManual && !ADSR3Enabled) || presetLoading) {
+    // Exponential block -> Mainboard / DCO
     uint8_t dataArrayDCO[SERIAL_LEN_ADSR_BLOCK];
     pack_u16_le4(dataArrayDCO, linToExpLookup[ADSR2_attack], linToExpLookup[ADSR2_decay], ADSR2_sustain, linToExpLookup[ADSR2_release]);
-
 #ifdef ENABLE_DCO_LINK
     serial_frame_write(DcoDma, CMD_ADSR2_BLOCK, dataArrayDCO, SERIAL_LEN_ADSR_BLOCK);
 #endif
 
+    // Linear bar graph block -> Direct to Screen
 #ifdef ENABLE_SCREEN_LINK
-    static uint16_t scr_a2_a = 0xFFFF, scr_a2_d = 0xFFFF, scr_a2_s = 0xFFFF, scr_a2_r = 0xFFFF;
-    if (presetLoading || ADSR2_attack != scr_a2_a || ADSR2_decay != scr_a2_d || 
-        ADSR2_sustain != scr_a2_s || ADSR2_release != scr_a2_r) {
-      scr_a2_a = ADSR2_attack; scr_a2_d = ADSR2_decay;
-      scr_a2_s = ADSR2_sustain; scr_a2_r = ADSR2_release;
-
-      uint8_t dataArrayScreen[SERIAL_LEN_ADSR_BLOCK];
-      pack_u16_le4(dataArrayScreen, ADSR2_attack, ADSR2_decay, ADSR2_sustain, ADSR2_release);
-      serial_frame_write(ScreenDma, CMD_ADSR2_BLOCK, dataArrayScreen, SERIAL_LEN_ADSR_BLOCK);
-    }
+    uint8_t dataArrayScreen[SERIAL_LEN_ADSR_BLOCK];
+    pack_u16_le4(dataArrayScreen, ADSR2_attack, ADSR2_decay, ADSR2_sustain, ADSR2_release);
+    serial_frame_write(ScreenDma, CMD_ADSR2_BLOCK, dataArrayScreen, SERIAL_LEN_ADSR_BLOCK);
 #endif
   } else if ((faderRow2ControlManual && ADSR3Enabled) || presetLoading) {
     uint8_t dataArray[SERIAL_LEN_ADSR_BLOCK];
@@ -176,7 +163,7 @@ void __not_in_flash_func(serial_send_manual_controls)(bool presetLoading) {
 #endif
   }
 
-  // 3. VCF Filter Pots
+  // 3. VCF Filter Pots -> Mainboard / DCO
   if (VCFPotsControlManual || presetLoading) {
     uint8_t dataArray[SERIAL_LEN_FILTER_BLOCK];
     pack_u16_le4(dataArray, CUTOFF, RESONANCE, (uint16_t)ADSR2toVCF, LFO2toVCF);
@@ -185,7 +172,7 @@ void __not_in_flash_func(serial_send_manual_controls)(bool presetLoading) {
 #endif
   }
 
-  // 4. VCA Pots
+  // 4. VCA Live Pot -> Mainboard / DCO
   if (VCAPotsControlManual || presetLoading) {
 #ifdef ENABLE_DCO_LINK
     uint8_t p[SERIAL_LEN_PARAM_16];
@@ -194,7 +181,7 @@ void __not_in_flash_func(serial_send_manual_controls)(bool presetLoading) {
 #endif
   }
 
-  // 5. PWM Pots
+  // 5. PWM Live Pot -> DCO Engine
   if (PWMPotsControlManual || presetLoading) {
 #ifdef ENABLE_DCO_LINK
     uint8_t p[SERIAL_LEN_PARAM_16];
@@ -207,79 +194,86 @@ void __not_in_flash_func(serial_send_manual_controls)(bool presetLoading) {
 void sendSerial() {}
 
 // =============================================================================
-// 3. Ingress Handlers (DCO / Mainboard -> Input Controller)
+// 3. Ingress Handlers (From Mainboard / DCO Link)
 // =============================================================================
-
-#define INPUT_RELAYS_DCO_TO_SCREEN INPUT_IS_DCO3
-
-static void __not_in_flash_func(serial_forward_param32_to_screen)(const uint8_t* payload, uint8_t len) {
-#if defined(ENABLE_SCREEN_LINK) && INPUT_RELAYS_DCO_TO_SCREEN
-  serial_frame_write(ScreenDma, CMD_PARAM_32, payload, len);
-#else
-  (void)payload;
-  (void)len;
-#endif
-}
-
-static void serial_forward_param16_to_screen(const uint8_t* payload, uint8_t len) {
-#if defined(ENABLE_SCREEN_LINK) && INPUT_RELAYS_DCO_TO_SCREEN
-  serial_frame_write(ScreenDma, CMD_PARAM_16, payload, len);
-#else
-  (void)payload;
-  (void)len;
-#endif
-}
-
-static void serial_forward_cal_amp_pw_to_screen_dco4(const uint8_t* payload, uint8_t len) {
-#if defined(ENABLE_SCREEN_LINK) && !INPUT_RELAYS_DCO_TO_SCREEN
-  serial_frame_write(ScreenDma, CMD_PARAM_16, payload, len);
-#else
-  (void)payload;
-  (void)len;
-#endif
-}
 
 static void __not_in_flash_func(input_handle_param32_from_dco)(char, const uint8_t* payload, uint8_t len) {
   ParamFrame frame;
   decode_param_x(payload, frame);
 
+  // 154: Forward real-time gap readout to Screen
   if (frame.id == (uint8_t)PARAM_GAP_FROM_DCO) {
-    serial_forward_param32_to_screen(payload, len);
+#ifdef ENABLE_SCREEN_LINK
+    serial_frame_write(ScreenDma, CMD_PARAM_32, payload, len);
+#endif
     return;
   }
 
+  // 155: Manual Offsets ([osc:8 | offset:8])
   if (frame.id == (uint8_t)PARAM_MANUAL_CALIBRATION_OFFSET_FROM_DCO) {
-    uint16_t packed   = (uint16_t)frame.value;
-    uint8_t  oscIndex = (uint8_t)(packed >> 8);
-    int8_t   offset   = (int8_t)(packed & 0xFF);
-
+    uint8_t oscIndex = (uint8_t)(frame.value >> 8);
+    int8_t  offset   = (int8_t)(frame.value & 0xFF);
     if (oscIndex < NUM_OSCILLATORS) {
       manualCalibrationInitAmpCompOffset[oscIndex] = offset;
-      if (manualCalibration) {
-        uint8_t currentIndex = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
-        if (oscIndex == currentIndex) {
-          serialSendParamByteToScreen(
-            ParamId::PARAM_MANUAL_CALIBRATION_OFFSET,
-            (uint8_t)manualCalibrationInitAmpCompOffset[currentIndex]
-          );
-        }
+      
+      // If this oscillator is currently active, sync encoder state and push to screen
+      uint8_t currentOsc = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
+      if (oscIndex == currentOsc && !INPUT_CAL_STAGE_IS_440(manualCalibrationStage) && !INPUT_CAL_STAGE_IS_PW_EDIT(manualCalibrationStage)) {
+        calibrationVal = (int16_t)offset;
+        serialSendParamByteToScreen(ParamId::PARAM_MANUAL_CALIBRATION_OFFSET, (uint8_t)offset);
       }
     }
+    return;
+  }
+
+  // 159: 440 Hz Amp Comp ([osc:8 | amp440:16])
+  if (frame.id == (uint8_t)PARAM_AMP_COMP_440) {
+    uint8_t  oscIndex = (uint8_t)(frame.value >> 16);
+    uint16_t ampVal   = (uint16_t)(frame.value & 0xFFFF);
+    if (oscIndex < NUM_OSCILLATORS) {
+      manualAmpComp440[oscIndex] = ampVal;
+      
+      uint8_t currentOsc = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
+      if (oscIndex == currentOsc && INPUT_CAL_STAGE_IS_440(manualCalibrationStage)) {
+        calibrationVal = (int16_t)ampVal;
+        input_send_param16_to_screen(ParamId::PARAM_AMP_COMP_440, (int16_t)ampVal);
+      }
+    }
+    return;
+  }
+
+  // 162: PW Centers ([channel:8 | pwCenter:16])
+  if (frame.id == (uint8_t)PARAM_CAL_PW_CENTER) {
+    uint8_t  chIndex = (uint8_t)(frame.value >> 16);
+    uint16_t pwVal   = (uint16_t)(frame.value & 0xFFFF);
+    if (chIndex < NUM_VOICES) {
+      manualPwCenter[chIndex] = pwVal;
+      
+      uint8_t currentOsc = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
+      uint8_t currentCh  = INPUT_CAL_PW_CH(currentOsc);
+      if (chIndex == currentCh && INPUT_CAL_STAGE_IS_PW_EDIT(manualCalibrationStage)) {
+        calibrationVal = (int16_t)pwVal;
+        input_send_param16_to_screen(ParamId::PARAM_CAL_PW_CENTER, (int16_t)pwVal);
+      }
+    }
+    return;
+  }
+
+  // 161: Scope 50% Duty Trim ([osc:8 | dutyOffset:16])
+  if (frame.id == (uint8_t)PARAM_AMP_COMP_DUTY_OFFSET) {
+    uint8_t oscIndex = (uint8_t)(frame.value >> 16);
+    int16_t dutyVal  = (int16_t)(frame.value & 0xFFFF);
+    if (oscIndex < NUM_OSCILLATORS) {
+      ampCompDutyOffset[oscIndex] = dutyVal; // Writes to own dedicated array!
+    }
+    return;
   }
 }
 
-static void input_handle_param16_from_dco(char, const uint8_t* payload, uint8_t len) {
+static void input_handle_param16_from_dco(char, const uint8_t* payload, uint8_t) {
   ParamFrame frame;
   decode_param_p(payload, frame);
-
-  // Dispatch to O(1) jump table in params.ino
   update_parameters((uint8_t)frame.id, (int16_t)frame.value);
-
-  // Forward manual cal trims to screen on DCO4
-  if (frame.id == (uint8_t)ParamId::PARAM_AMP_COMP_440 || frame.id == (uint8_t)ParamId::PARAM_CAL_PW_CENTER) {
-    serial_forward_cal_amp_pw_to_screen_dco4(payload, len);
-  }
-  serial_forward_param16_to_screen(payload, len);
 }
 
 static void input_apply_adsr_block_from_dco(const uint8_t* payload, uint16_t& attack, uint16_t& decay, uint16_t& sustain, uint16_t& release) {
@@ -289,71 +283,53 @@ static void input_apply_adsr_block_from_dco(const uint8_t* payload, uint16_t& at
   release = exp_to_lin_index(decode_u16_le(payload + 6));
 }
 
-static void input_forward_adsr_block_to_screen(uint8_t cmd, uint16_t attack, uint16_t decay, uint16_t sustain, uint16_t release) {
-#if defined(ENABLE_SCREEN_LINK) && INPUT_RELAYS_DCO_TO_SCREEN
-  uint8_t payload[SERIAL_LEN_ADSR_BLOCK];
-  encode_u16_le(payload + 0, attack);
-  encode_u16_le(payload + 2, decay);
-  encode_u16_le(payload + 4, sustain);
-  encode_u16_le(payload + 6, release);
-  serial_frame_write(ScreenDma, cmd, payload, SERIAL_LEN_ADSR_BLOCK);
-#else
-  (void)cmd; (void)attack; (void)decay; (void)sustain; (void)release;
-#endif
-}
-
 static void input_handle_adsr1_from_dco(char, const uint8_t* payload, uint8_t) {
   input_apply_adsr_block_from_dco(payload, ADSR1_attack, ADSR1_decay, ADSR1_sustain, ADSR1_release);
-  input_forward_adsr_block_to_screen(CMD_ADSR1_BLOCK, ADSR1_attack, ADSR1_decay, ADSR1_sustain, ADSR1_release);
 }
 
 static void input_handle_adsr2_from_dco(char, const uint8_t* payload, uint8_t) {
   input_apply_adsr_block_from_dco(payload, ADSR2_attack, ADSR2_decay, ADSR2_sustain, ADSR2_release);
-  input_forward_adsr_block_to_screen(CMD_ADSR2_BLOCK, ADSR2_attack, ADSR2_decay, ADSR2_sustain, ADSR2_release);
 }
 
 static void input_handle_adsr3_from_dco(char, const uint8_t* payload, uint8_t) {
   input_apply_adsr_block_from_dco(payload, ADSR3_attack, ADSR3_decay, ADSR3_sustain, ADSR3_release);
 }
 
-static void input_send_ui_param_to_screen(uint8_t id, int16_t value) {
-#if defined(ENABLE_SCREEN_LINK) && INPUT_RELAYS_DCO_TO_SCREEN
-  uint8_t payload[SERIAL_LEN_PARAM_16];
-  encode_param_p(payload, id, value);
-  serial_frame_write(ScreenDma, CMD_PARAM_16, payload, SERIAL_LEN_PARAM_16);
-#else
-  (void)id;
-  (void)value;
-#endif
-}
-
 static void input_handle_filter_block_from_dco(char, const uint8_t* payload, uint8_t) {
-  const uint16_t cutoff     = decode_u16_le(payload + 0);
-  const uint16_t resonance  = decode_u16_le(payload + 2);
-  const int16_t  adsr2toVCF = decode_i16_le(payload + 4);
-  const int16_t  lfo2toVCF  = (int16_t)decode_u16_le(payload + 6);
+  CUTOFF     = decode_u16_le(payload + 0);
+  RESONANCE  = decode_u16_le(payload + 2);
+  ADSR2toVCF = decode_i16_le(payload + 4);
+  LFO2toVCF  = (int16_t)decode_u16_le(payload + 6);
+}
 
-  if (cutoff != CUTOFF) {
-    CUTOFF = cutoff;
-    input_send_ui_param_to_screen((uint8_t)ParamId::PARAM_UI_CUTOFF, (int16_t)cutoff);
-  }
-  if (resonance != RESONANCE) {
-    RESONANCE = resonance;
-    input_send_ui_param_to_screen((uint8_t)ParamId::PARAM_UI_RESONANCE, (int16_t)resonance);
-  }
-  if (adsr2toVCF != ADSR2toVCF) {
-    ADSR2toVCF = adsr2toVCF;
-    input_send_ui_param_to_screen((uint8_t)ParamId::PARAM_UI_ADSR2_TO_VCF, adsr2toVCF);
-  }
-  if (lfo2toVCF != LFO2toVCF) {
-    LFO2toVCF = lfo2toVCF;
-    input_send_ui_param_to_screen((uint8_t)ParamId::PARAM_UI_LFO2_TO_VCF, lfo2toVCF);
+// Inbound Preset Name Ingress (17 bytes: [slot:u8][name:16 ASCII] or 16 bytes raw)
+static void input_handle_preset_name_from_dco(char, const uint8_t* payload, uint8_t len) {
+  if (len == SERIAL_LEN_SCREEN_PRESET_SCROLL) {
+    const uint8_t slot = payload[0];
+    if (slot < PRESET_NUM_SLOTS) {
+      currentPreset = slot;
+      presetSelectVal = slot;
+      memcpy(presetDir[slot], payload + 1, 16);
+      memcpy(presetName, payload + 1, 16);
+      memcpy(presetNameVal, payload + 1, 16);
+      presetNameString = String((char*)presetName);
+      ledRefreshPending = true;
+    }
+  } else if (len == SERIAL_LEN_PRESET_NAME) {
+    memcpy(presetName, payload, 16);
+    memcpy(presetNameVal, payload, 16);
+    if (currentPreset < PRESET_NUM_SLOTS) {
+      memcpy(presetDir[currentPreset], payload, 16);
+    }
+    presetNameString = String((char*)presetName);
+    ledRefreshPending = true;
   }
 }
 
-// Domain Block Ingress Handlers (Defined ABOVE dcoLinkCommands table)
+// Domain Block Ingress Handlers
 static void input_handle_patch_osc_block_from_dco(char, const uint8_t* payload, uint8_t) {
   const PatchOscBlock* blk = (const PatchOscBlock*)payload;
+
   OSC1Interval     = blk->osc1_interval;
   OSC2Interval     = blk->osc2_interval;
   OSC3Interval     = blk->osc3_interval;
@@ -370,6 +346,19 @@ static void input_handle_patch_osc_block_from_dco(char, const uint8_t* payload, 
   portamentoTime   = blk->portamento_time;
   portamentoMode   = blk->portamento_mode;
   characterAmount  = blk->character;
+
+  // Unpack panel LED states
+  waveEnable[0][0] = (blk->wave_enables & (1u << 0)) != 0; // OSC1 Saw
+  waveEnable[0][1] = (blk->wave_enables & (1u << 1)) != 0; // OSC1 Pulse
+  waveEnable[0][2] = (blk->wave_enables & (1u << 2)) != 0; // OSC1 Tri
+  waveEnable[1][0] = (blk->wave_enables & (1u << 3)) != 0; // OSC2 Saw
+  waveEnable[1][1] = (blk->wave_enables & (1u << 4)) != 0; // OSC2 Pulse
+  waveEnable[1][2] = (blk->wave_enables & (1u << 5)) != 0; // OSC2 Tri
+  waveEnable[2][0] = (blk->wave_enables & (1u << 6)) != 0; // OSC3 Saw
+  waveEnable[2][1] = (blk->wave_enables & (1u << 7)) != 0; // OSC3 Pulse
+  waveEnable[2][2] = (blk->wave_enables & (1u << 8)) != 0; // OSC3 Tri
+
+  ledRefreshPending = true; // Triggers immediate physical LED update on panel
 }
 
 static void input_handle_patch_lfo_block_from_dco(char, const uint8_t* payload, uint8_t) {
@@ -388,7 +377,7 @@ static void input_handle_patch_lfo_block_from_dco(char, const uint8_t* payload, 
   LFO2toOSC3_coarse      = blk->lfo2_to_osc3_coarse;
   LFO2toPWM              = blk->lfo2_to_pw;
   LFO1toVCA              = blk->lfo1_to_vca;
-  PW                     = blk->pw_value;
+  PW                     = blk->pw_value;  // Restores pulse width in panel RAM
   ADSR1toVCA             = blk->adsr1_to_vca;
   ADSR3toPWM             = blk->adsr3_to_pwm;
   ADSR3toDETUNE1         = blk->adsr3_to_detune1;
@@ -410,17 +399,18 @@ static void input_handle_patch_mod_block_from_dco(char, const uint8_t* payload, 
 // =============================================================================
 
 static const SerialCommandDef dcoLinkCommands[] = {
-  { CMD_PARAM_16,         SERIAL_LEN_PARAM_16,         input_handle_param16_from_dco },
-  { CMD_PARAM_32,         SERIAL_LEN_PARAM_32,         input_handle_param32_from_dco },
-  { CMD_ADSR1_BLOCK,      SERIAL_LEN_ADSR_BLOCK,       input_handle_adsr1_from_dco },
-  { CMD_ADSR2_BLOCK,      SERIAL_LEN_ADSR_BLOCK,       input_handle_adsr2_from_dco },
-  { CMD_ADSR3_BLOCK,      SERIAL_LEN_ADSR_BLOCK,       input_handle_adsr3_from_dco },
-  { CMD_FILTER_BLOCK,     SERIAL_LEN_FILTER_BLOCK,     input_handle_filter_block_from_dco },
-  { CMD_PRESET_DIR_ENTRY, SERIAL_LEN_PRESET_DIR_ENTRY, input_handle_preset_dir_entry },
-  { CMD_PRESET_LOADED,    SERIAL_LEN_PRESET_LOADED,    input_handle_preset_loaded    },
-  { CMD_BLOCK_OSC,        SERIAL_LEN_BLOCK_OSC,        input_handle_patch_osc_block_from_dco },
-  { CMD_BLOCK_LFO,        SERIAL_LEN_BLOCK_LFO,        input_handle_patch_lfo_block_from_dco },
-  { CMD_BLOCK_MOD,        SERIAL_LEN_BLOCK_MOD,        input_handle_patch_mod_block_from_dco },
+  { CMD_PARAM_16,         SERIAL_LEN_PARAM_16,             input_handle_param16_from_dco },
+  { CMD_PARAM_32,         SERIAL_LEN_PARAM_32,             input_handle_param32_from_dco },
+  { CMD_ADSR1_BLOCK,      SERIAL_LEN_ADSR_BLOCK,           input_handle_adsr1_from_dco },
+  { CMD_ADSR2_BLOCK,      SERIAL_LEN_ADSR_BLOCK,           input_handle_adsr2_from_dco },
+  { CMD_ADSR3_BLOCK,      SERIAL_LEN_ADSR_BLOCK,           input_handle_adsr3_from_dco },
+  { CMD_FILTER_BLOCK,     SERIAL_LEN_FILTER_BLOCK,         input_handle_filter_block_from_dco },
+  { CMD_PRESET_DIR_ENTRY, SERIAL_LEN_PRESET_DIR_ENTRY,     input_handle_preset_dir_entry },
+  { CMD_PRESET_LOADED,    SERIAL_LEN_PRESET_LOADED,        input_handle_preset_loaded },
+  { CMD_PRESET_NAME,      SERIAL_LEN_SCREEN_PRESET_SCROLL, input_handle_preset_name_from_dco },
+  { CMD_BLOCK_OSC,        SERIAL_LEN_BLOCK_OSC,            input_handle_patch_osc_block_from_dco },
+  { CMD_BLOCK_LFO,        SERIAL_LEN_BLOCK_LFO,            input_handle_patch_lfo_block_from_dco },
+  { CMD_BLOCK_MOD,        SERIAL_LEN_BLOCK_MOD,            input_handle_patch_mod_block_from_dco },
 };
 
 static SerialCommandTable dcoLinkLut;
@@ -452,5 +442,5 @@ void input_disable_all_manual_controls() {
 #ifdef ALL_CONTROLS_MANUAL
   allControlsManual      = false;
 #endif
-  ledRefreshPending      = true; // Refresh button LEDs if applicable
+  ledRefreshPending      = true;
 }

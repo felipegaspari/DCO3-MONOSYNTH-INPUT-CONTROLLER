@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "params_def.h"
+#include "_build_libs/DCO-PROTOCOL/params_def.h"
 
 // -----------------------------------------------------------------------------
 // Which instrument this Input controller build targets.

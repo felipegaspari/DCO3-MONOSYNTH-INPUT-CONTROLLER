@@ -32,14 +32,13 @@ uint16_t CUTOFF = 1024;
 int16_t VCALevel = 0;
 
 #include <stdint.h>
-#include "params_def.h"
+#include "_build_libs/DCO-PROTOCOL/params_def.h"
 #include "params.h"
 
 #include "auxiliary.h"
 
 #include "Timers_millis.h"
 #include "Serial.h"
-
 #include "Controls.h"
 #include "buttons.h"
 #include "encoders.h"
