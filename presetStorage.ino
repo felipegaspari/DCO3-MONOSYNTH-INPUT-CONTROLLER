@@ -26,6 +26,12 @@ void input_handle_preset_loaded(char, const uint8_t *payload, uint8_t) {
   memcpy(presetNameVal, presetDir[slot], PRESET_NAME_LEN);
   presetNameString = String((char *)presetName);
   ledRefreshPending = true;
+
+  // =========================================================================
+  // FIX: Unfreeze the screen immediately and draw the new preset!
+  // =========================================================================
+  serial_send_signal(1); // Signal 1 = ScreenMode::PresetScroll (Unfreeze)
+  serial_send_preset_scroll(currentPreset, presetName);
 }
 
 void get_preset_name(byte presetN, byte (&myarray)[PRESET_NAME_LEN]) {
@@ -44,7 +50,6 @@ void preset_save_to_board(uint16_t slot) {
   memcpy(presetDir[slot], presetNameVal, PRESET_NAME_LEN);
   memcpy(presetName, presetNameVal, PRESET_NAME_LEN);
 
-  saveFlow = SaveFlow::IDLE;
   currentPreset = slot;
   presetSelectVal = currentPreset;
 
@@ -70,12 +75,11 @@ void preset_load_from_board(uint16_t slot) {
   presetNameString = String((char *)presetName);
 
   // 4. Update Screen slot/name display (DCO will send unfreeze Signal 1 when finished)
-  serial_send_preset_scroll(currentPreset, presetName);
+  //serial_send_preset_scroll(currentPreset, presetName);
 }
 
 void writePresetActions(uint16_t presetN) {
   input_disable_all_manual_controls();
-  saveFlow = SaveFlow::IDLE;
   currentPreset = presetN;
   presetSelectVal = currentPreset;
   set_LED_Status(LED_REFRESH_ALL, 0);

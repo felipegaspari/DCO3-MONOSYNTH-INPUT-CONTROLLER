@@ -121,13 +121,32 @@ EncoderStruct encoders[] = {
   { enc11, 18, 19, { ACTION_LFO2_to_PWM,  ACTION_NONE,             ACTION_NONE },       { ACTION_ADSR3_to_PWM,     ACTION_NONE,                ACTION_NONE } },
 };
 
-EncoderAction manualCalibrationActions[NUM_ENCODERS] = { ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_CALIBRATION_OFFSET, ACTION_CALIBRATION_STAGE, ACTION_NONE, ACTION_NONE };
+// Preset Save Mode Tables: only the relevant encoders have actions, all others are ACTION_NONE
+EncoderAction presetSaveSelectActions[NUM_ENCODERS] = { 
+  ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_NONE, 
+  ACTION_NONE,           // Enc 8
+  ACTION_select_preset,  // Enc 9: scroll slot
+  ACTION_NONE, ACTION_NONE 
+};
+
+EncoderAction presetSaveNameActions[NUM_ENCODERS] = { 
+  ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_NONE,  
+  ACTION_select_char,     // Enc 7: change letter
+  ACTION_select_char_pos, // Enc 8: change position
+  ACTION_NONE,
+  ACTION_NONE, ACTION_NONE 
+};
+
+static_assert(sizeof(presetSaveSelectActions) / sizeof(presetSaveSelectActions[0]) == NUM_ENCODERS,
+              "presetSaveSelectActions[] must have NUM_ENCODERS entries");
+static_assert(sizeof(presetSaveNameActions) / sizeof(presetSaveNameActions[0]) == NUM_ENCODERS,
+              "presetSaveNameActions[] must have NUM_ENCODERS entries");
+              
 EncoderAction menuNavigationActions[NUM_ENCODERS] = { ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_NONE, ACTION_MENU_VALUE, ACTION_MENU_POS, ACTION_NONE, ACTION_NONE };
 
 static_assert(sizeof(encoders) / sizeof(encoders[0]) == NUM_ENCODERS,
               "encoders[] must have NUM_ENCODERS entries");
-static_assert(sizeof(manualCalibrationActions) / sizeof(manualCalibrationActions[0]) == NUM_ENCODERS,
-              "manualCalibrationActions[] must have NUM_ENCODERS entries");
+
 static_assert(sizeof(menuNavigationActions) / sizeof(menuNavigationActions[0]) == NUM_ENCODERS,
               "menuNavigationActions[] must have NUM_ENCODERS entries");
 

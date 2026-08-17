@@ -81,7 +81,7 @@ uint16_t oscSyncMode = 0;
 
 int8_t ADSR3ToOscSelect;
 
-byte presetName[17] = { 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32 };
+byte presetName[17] = { 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 0 };
 String presetNameString;
 byte currentPreset;
 

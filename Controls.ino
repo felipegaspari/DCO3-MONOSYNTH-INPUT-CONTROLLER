@@ -3,18 +3,14 @@
 void init_controls() {
   analogReadResolution(12);
 
-  enc1.begin();
-  enc2.begin();
-  enc3.begin();
-  enc4.begin();
-  enc5.begin();
-  enc6.begin();
-  enc7.begin();
-  enc8.begin();
-  enc9.begin();
-  enc10.begin();
-  enc11.begin();
+  analogReadResolution(12);
 
+  // Initialize the instances actually living in the arrays!
+  for(int i = 0; i < NUM_ENCODERS; i++) {
+    encoders[i].MD_REncoder_Name.begin();
+  }
+  
+  pinMode(digitalMUX1_PIN_SIG0, INPUT);
   pinMode(digitalMUX1_PIN_SIG0, INPUT);
   pinMode(digitalMUX2_PIN_SIG0, INPUT);
   pinMode(digitalMUX3_PIN_SIG0, INPUT);
@@ -141,54 +137,6 @@ void __not_in_flash_func(read_digitalMux)(bool readPots) {
     //if (activeDigitalMuxChannel > 15) activeDigitalMuxChannel = 0;
   }
 }
-
-// Legacy preset-save encoder path. Superseded by main encoder modes; keep for reference.
-void read_encoders_preset_save() {
-  byte x = enc5.read(valorMUX1[0], valorMUX1[1]);
-
-  if (x) {
-    if (x == DIR_CW) {
-      charSelectVal = charSelectVal + (1 + (0.5 * enc5.speed()));
-    } else {
-      charSelectVal = charSelectVal - (1 + (0.5 * enc5.speed()));
-    }
-    charSelectVal = constrain(charSelectVal, 32, 255);
-    presetNameVal[presetCharPos] = charSelectVal;
-    serial_send_preset_scroll(presetSelectVal, presetNameVal);
-
-    byte presetName4Chars[4];
-    for (byte i = 0; i < 4; i++) {
-      presetName4Chars[i] = presetNameVal[i];
-    }
-  }
-}
-
-// Legacy preset-save button path for char position / confirm.
-void read_encoder_buttons_preset_save() {
-  button5.update(valorMUX1[14], 50, LOW);
-  if (button5.held()) {
-    for (int i = 0; i < 13; i++) {
-      presetName[i] = presetNameVal[i];
-    }
-    //writePreset(presetSelectVal);
-
-    currentPreset = presetSelectVal;
-    serial_send_signal(SIGNAL_PRESET_SAVED);
-    presetSaved = true;
-    //  presetSave = false;
-    presetCharPos = 0;
-    charSelectVal = 0;
-  } else if (button5.released(true)) {
-    presetCharPos++;
-
-    if (presetCharPos > 11) {
-      presetCharPos = 0;
-    }
-    charSelectVal = presetNameVal[presetCharPos];
-    serial_send_save_char_select(presetCharPos);
-  }
-}
-
 
 // Cubic-ish fader curve helper (also used from Controls).
 uint16_t faderExpConverter(uint16_t readingValue) {

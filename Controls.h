@@ -7,6 +7,9 @@
 //#include <light_CD74HC4067.h>
 #include "_build_libs/MD_REncoder_fela/src/MD_REncoder_fela.h"
 #include "_build_libs/CD74HC4067/src/CD74HC4067.h"
+#include "Flow.h"
+#include "PresetSaveFlow.h"
+#include "CalibrationFlow.h" 
 //#include "analogmuxdemux.h"
 
 // #define PIN_SAW1 42
@@ -157,24 +160,34 @@ bool ADSR3Enabled = false;
 
 bool presetSelect = false;
 
-// Preset save UI flow (buttons.ino drives the transitions):
-//   IDLE -> SELECT (scroll to a slot) -> NAME_EDIT (edit name) -> commit -> IDLE
-enum class SaveFlow : uint8_t {
-  IDLE,
-  SELECT,
-  NAME_EDIT,
-};
-SaveFlow saveFlow = SaveFlow::IDLE;
+
+
 
 bool presetSaved = true;
-
-uint8_t presetSelectVal = 0;
-byte presetCharPos = 0;
-byte charSelectVal = 0;
 
 byte loadedName[17];
 
 bool funcKeyOn = false;
+
+uint8_t presetSelectVal = 0;
+
+// The Global Flow Handlers
+Flow* activeFlow = nullptr;
+PresetSaveFlow presetSaveFlow;
+CalibrationFlow calibrationFlow; 
+
+void enterFlow(Flow* flow) {
+  if (activeFlow != nullptr) activeFlow->onExit();
+  activeFlow = flow;
+  if (activeFlow != nullptr) activeFlow->onEnter();
+}
+
+void exitActiveFlow() {
+  if (activeFlow != nullptr) {
+    activeFlow->onExit();
+    activeFlow = nullptr;
+  }
+}
 
 void init_controls();
 void readControls();
