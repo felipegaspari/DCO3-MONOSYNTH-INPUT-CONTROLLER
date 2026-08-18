@@ -31,6 +31,9 @@ uint16_t RESONANCE;
 uint16_t CUTOFF = 1024;
 int16_t VCALevel = 0;
 
+#define ENABLE_DCO_LINK
+#define ENABLE_SCREEN_LINK
+
 #include <stdint.h>
 #include "_build_libs/DCO-PROTOCOL/params_def.h"
 #include "params.h"

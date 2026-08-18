@@ -4,8 +4,7 @@
 #include "sram_hot.h"
 #include "board_model.h"
 
-#define ENABLE_DCO_LINK
-#define ENABLE_SCREEN_LINK
+
 #define DCO_PORT    INPUT_DCO_PORT_OBJ
 #define DCO_RX_PORT INPUT_DCO_RX_PORT_OBJ
 #define SCREEN_PORT INPUT_SCREEN_PORT_OBJ
