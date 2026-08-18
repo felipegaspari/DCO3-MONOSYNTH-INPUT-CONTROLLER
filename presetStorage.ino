@@ -30,7 +30,7 @@ void input_handle_preset_loaded(char, const uint8_t *payload, uint8_t) {
   // =========================================================================
   // FIX: Unfreeze the screen immediately and draw the new preset!
   // =========================================================================
-  serial_send_signal(1); // Signal 1 = ScreenMode::PresetScroll (Unfreeze)
+  serial_send_signal(SCREEN_SIGNAL_NORMAL); // Signal 1 = ScreenMode::PresetScroll (Unfreeze)
   serial_send_preset_scroll(currentPreset, presetName);
 }
 
@@ -59,23 +59,15 @@ void preset_save_to_board(uint16_t slot) {
 void preset_load_from_board(uint16_t slot) {
   if (slot >= PRESET_NUM_SLOTS) return;
 
+  // 1. Drop local panel overrides
   input_disable_all_manual_controls();
 
-  // 1. Freeze Screen toasts immediately so incoming patch parameters stay silent
-  serial_send_signal(SCREEN_SIGNAL_SILENT);
-
-  // 2. Request DCO to load the preset from LittleFS/RAM
+  // 2. Request DCO to load the preset
   serial_send_param_change_byte(ParamId::PARAM_PRESET_LOAD, (byte)slot, false);
 
-  // 3. Sync local UI state
-  currentPreset = slot;
+  // 3. Keep local selector in sync
+  currentPreset = (byte)slot;
   presetSelectVal = currentPreset;
-  memcpy(presetName, presetDir[slot], PRESET_NAME_LEN);
-  memcpy(presetNameVal, presetDir[slot], PRESET_NAME_LEN);
-  presetNameString = String((char *)presetName);
-
-  // 4. Update Screen slot/name display (DCO will send unfreeze Signal 1 when finished)
-  //serial_send_preset_scroll(currentPreset, presetName);
 }
 
 void writePresetActions(uint16_t presetN) {

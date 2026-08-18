@@ -6,7 +6,7 @@
 // Directory & Name RAM Buffers
 extern byte presetDir[PRESET_NUM_SLOTS][PRESET_NAME_LEN];
 extern byte presetNameVal[PRESET_NAME_LEN];
-extern byte presetName[PRESET_NAME_LEN + 1]; // +1 for null termination if needed
+extern byte presetName[PRESET_NAME_LEN + 1] = { 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 0 };; // +1 for null termination if needed
 
 byte noteStart[NUM_VOICES];
 byte noteEnd[NUM_VOICES];
@@ -81,7 +81,6 @@ uint16_t oscSyncMode = 0;
 
 int8_t ADSR3ToOscSelect;
 
-byte presetName[17] = { 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 0 };
 String presetNameString;
 byte currentPreset;
 

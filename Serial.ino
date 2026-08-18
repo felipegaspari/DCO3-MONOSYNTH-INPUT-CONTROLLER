@@ -53,9 +53,7 @@ void __not_in_flash_func(serial_send_param_change)(byte param, uint16_t paramVal
   }
 #endif
 #ifdef ENABLE_DCO_LINK
-  if (paramValue != (uint16_t)-1) {
     serial_frame_write(DcoDma, CMD_PARAM_16, payload, SERIAL_LEN_PARAM_16);
-  }
 #endif
 }
 
@@ -326,72 +324,108 @@ static void input_handle_preset_name_from_dco(char, const uint8_t* payload, uint
   }
 }
 
-// Domain Block Ingress Handlers
+// =============================================================================
+// Domain Block Ingress from DCO (All Routed via update_parameters)
+// =============================================================================
+
+// 1. Oscillator & Voice Configuration Block ('v')
 static void input_handle_patch_osc_block_from_dco(char, const uint8_t* payload, uint8_t) {
   const PatchOscBlock* blk = (const PatchOscBlock*)payload;
 
-  OSC1Interval     = blk->osc1_interval;
-  OSC2Interval     = blk->osc2_interval;
-  OSC3Interval     = blk->osc3_interval;
-  OSC2Detune       = blk->osc2_detune;
-  unisonDetune     = blk->unison_detune;
-  voiceMode        = blk->voice_mode;
-  voiceAllocMode   = blk->voice_alloc_mode;
-  syncMode         = blk->sync_mode;
-  softSync         = blk->soft_sync;
-  subOscDivide     = blk->subosc_divide;
-  analogDrift      = blk->analog_drift;
-  analogDriftSpeed = blk->analog_drift_speed;
-  analogDriftSpread= blk->analog_drift_spread;
-  portamentoTime   = blk->portamento_time;
-  portamentoMode   = blk->portamento_mode;
-  characterAmount  = blk->character;
+  // Wave buttons/LEDs (Bitmask unpacking)
+  update_parameters(PARAM_OSC1_SAW_ENABLE,   (blk->wave_enables & (1u << 0)) != 0);
+  update_parameters(PARAM_OSC1_PULSE_ENABLE, (blk->wave_enables & (1u << 1)) != 0);
+  update_parameters(PARAM_OSC1_TRI_ENABLE,   (blk->wave_enables & (1u << 2)) != 0);
+  update_parameters(PARAM_OSC2_SAW_ENABLE,   (blk->wave_enables & (1u << 3)) != 0);
+  update_parameters(PARAM_OSC2_PULSE_ENABLE, (blk->wave_enables & (1u << 4)) != 0);
+  update_parameters(PARAM_OSC2_TRI_ENABLE,   (blk->wave_enables & (1u << 5)) != 0);
+  update_parameters(PARAM_OSC3_SAW_ENABLE,   (blk->wave_enables & (1u << 6)) != 0);
+  update_parameters(PARAM_OSC3_PULSE_ENABLE, (blk->wave_enables & (1u << 7)) != 0);
+  update_parameters(PARAM_OSC3_TRI_ENABLE,   (blk->wave_enables & (1u << 8)) != 0);
 
-  // Unpack panel LED states
-  waveEnable[0][0] = (blk->wave_enables & (1u << 0)) != 0; // OSC1 Saw
-  waveEnable[0][1] = (blk->wave_enables & (1u << 1)) != 0; // OSC1 Pulse
-  waveEnable[0][2] = (blk->wave_enables & (1u << 2)) != 0; // OSC1 Tri
-  waveEnable[1][0] = (blk->wave_enables & (1u << 3)) != 0; // OSC2 Saw
-  waveEnable[1][1] = (blk->wave_enables & (1u << 4)) != 0; // OSC2 Pulse
-  waveEnable[1][2] = (blk->wave_enables & (1u << 5)) != 0; // OSC2 Tri
-  waveEnable[2][0] = (blk->wave_enables & (1u << 6)) != 0; // OSC3 Saw
-  waveEnable[2][1] = (blk->wave_enables & (1u << 7)) != 0; // OSC3 Pulse
-  waveEnable[2][2] = (blk->wave_enables & (1u << 8)) != 0; // OSC3 Tri
+  // Intervals, Detunes & Modes
+  update_parameters(PARAM_OSC1_INTERVAL,       blk->osc1_interval);
+  update_parameters(PARAM_OSC2_INTERVAL,       blk->osc2_interval);
+  update_parameters(PARAM_OSC3_INTERVAL,       blk->osc3_interval);
+  update_parameters(PARAM_OSC2_DETUNE_VAL,     blk->osc2_detune);
+  update_parameters(PARAM_UNISON_DETUNE,       blk->unison_detune);
+  update_parameters(PARAM_VOICE_MODE,          blk->voice_mode);
+  update_parameters(PARAM_VOICE_ALLOC_MODE,    blk->voice_alloc_mode);
+  update_parameters(PARAM_SYNC_MODE,           blk->sync_mode);
+  update_parameters(PARAM_SOFT_SYNC,           blk->soft_sync);
+  update_parameters(PARAM_SUBOSC_DIVIDE,       blk->subosc_divide);
+  update_parameters(PARAM_ANALOG_DRIFT_AMOUNT, blk->analog_drift);
+  update_parameters(PARAM_ANALOG_DRIFT_SPEED,  blk->analog_drift_speed);
+  update_parameters(PARAM_ANALOG_DRIFT_SPREAD, blk->analog_drift_spread);
+  update_parameters(PARAM_PORTAMENTO_TIME,     blk->portamento_time);
+  update_parameters(PARAM_PORTAMENTO_MODE,     blk->portamento_mode);
+  update_parameters(PARAM_CHARACTER,           blk->character);
 
   ledRefreshPending = true; // Triggers immediate physical LED update on panel
 }
 
+// 2. LFO & Modulation Block ('l')
 static void input_handle_patch_lfo_block_from_dco(char, const uint8_t* payload, uint8_t) {
   const PatchLfoBlock* blk = (const PatchLfoBlock*)payload;
-  LFO1Waveform           = blk->lfo1_waveform;
-  LFO2Waveform           = blk->lfo2_waveform;
-  LFO1Speed              = blk->lfo1_speed;
-  LFO2Speed              = blk->lfo2_speed;
-  LFO1toDCO              = blk->lfo1_to_dco;
-  LFO1toOSC1             = blk->lfo1_to_osc1;
-  LFO1toOSC2             = blk->lfo1_to_osc2;
-  LFO1toOSC3             = blk->lfo1_to_osc3;
-  LFO2toOSC2DETUNE       = blk->lfo2_to_osc2;
-  LFO2toOSC3DETUNE       = blk->lfo2_to_osc3;
-  LFO2toOSC2_coarse      = blk->lfo2_to_osc2_coarse;
-  LFO2toOSC3_coarse      = blk->lfo2_to_osc3_coarse;
-  LFO2toPWM              = blk->lfo2_to_pw;
-  LFO1toVCA              = blk->lfo1_to_vca;
-  PW                     = blk->pw_value;  // Restores pulse width in panel RAM
-  ADSR1toVCA             = blk->adsr1_to_vca;
-  ADSR3toPWM             = blk->adsr3_to_pwm;
-  ADSR3toDETUNE1         = blk->adsr3_to_detune1;
-  env_dco_pitch_centered = blk->adsr3_pitch_mode;
-  ADSR3ToOscSelect       = blk->adsr3_to_osc_select;
+
+  update_parameters(PARAM_LFO1_WAVEFORM,        blk->lfo1_waveform);
+  update_parameters(PARAM_LFO2_WAVEFORM,        blk->lfo2_waveform);
+  update_parameters(PARAM_LFO1_SPEED,           blk->lfo1_speed);
+  update_parameters(PARAM_LFO2_SPEED,           blk->lfo2_speed);
+  update_parameters(PARAM_LFO1_TO_DCO,          blk->lfo1_to_dco);
+  update_parameters(PARAM_LFO1_TO_OSC1,         blk->lfo1_to_osc1);
+  update_parameters(PARAM_LFO1_TO_OSC2,         blk->lfo1_to_osc2);
+  update_parameters(PARAM_LFO1_TO_OSC3,         blk->lfo1_to_osc3);
+  update_parameters(PARAM_LFO2_TO_OSC2,         blk->lfo2_to_osc2);
+  update_parameters(PARAM_LFO2_TO_OSC3,         blk->lfo2_to_osc3);
+  update_parameters(PARAM_LFO2_TO_OSC2_COARSE,  blk->lfo2_to_osc2_coarse);
+  update_parameters(PARAM_LFO2_TO_OSC3_COARSE,  blk->lfo2_to_osc3_coarse);
+  update_parameters(PARAM_LFO2_TO_PW,           blk->lfo2_to_pw);
+  update_parameters(PARAM_LFO1_TO_VCA,          blk->lfo1_to_vca);
+  update_parameters(PARAM_PW_VALUE,             blk->pw_value);
+  update_parameters(PARAM_ADSR1_TO_VCA,         blk->adsr1_to_vca);
+  update_parameters(PARAM_ADSR3_TO_PWM,         blk->adsr3_to_pwm); // Math handled in apply_param
+  update_parameters(PARAM_ADSR3_TO_DETUNE1,     blk->adsr3_to_detune1);
+  update_parameters(PARAM_ADSR3_PITCH_MODE,     blk->adsr3_pitch_mode);
+  update_parameters(PARAM_ADSR3_TO_OSC_SELECT,  blk->adsr3_to_osc_select);
 }
 
+// 3. Mod Matrix Block ('M')
 static void input_handle_patch_mod_block_from_dco(char, const uint8_t* payload, uint8_t) {
   const PatchModBlock* blk = (const PatchModBlock*)payload;
+
   for (uint8_t i = 0; i < 8; i++) {
-    modSlotSource[i] = blk->slots[i].src;
-    modSlotDest[i]   = blk->slots[i].dest;
-    modSlotDepth[i]  = blk->slots[i].depth;
+    update_parameters(PARAM_MOD_SLOT0_SOURCE + i * 3, blk->slots[i].src);
+    update_parameters(PARAM_MOD_SLOT0_DEST   + i * 3, blk->slots[i].dest);
+    update_parameters(PARAM_MOD_SLOT0_DEPTH  + i * 3, blk->slots[i].depth);
   }
+}
+
+// 4. Mixer, Curves, VCA & Filter Modes Block ('X')
+static void input_handle_patch_mix_block_from_dco(char, const uint8_t* payload, uint8_t) {
+  const PatchMixBlock* blk = (const PatchMixBlock*)payload;
+
+  update_parameters(PARAM_OSC1_LEVEL,          blk->osc1_level);
+  update_parameters(PARAM_OSC2_LEVEL,          blk->osc2_level);
+  update_parameters(PARAM_OSC3_LEVEL,          blk->osc3_level);
+  update_parameters(PARAM_SUB_LEVEL,           blk->sub_level);
+  update_parameters(PARAM_VCA_LEVEL,           blk->vca_level);
+  update_parameters(PARAM_FILTER_MODE,         blk->filter_mode);
+  update_parameters(PARAM_VELOCITY_TO_VCF,     blk->velocity_to_vcf);
+  update_parameters(PARAM_VELOCITY_TO_VCA,     blk->velocity_to_vca);
+  update_parameters(PARAM_VCF_KEYTRACK,        blk->vcf_keytrack);
+  update_parameters(PARAM_ADSR1_TO_VCA,        blk->adsr1_to_vca);
+  update_parameters(PARAM_DIST_DRIVE,          blk->dist_drive);
+  update_parameters(PARAM_DIST_MIX,            blk->dist_mix);
+  update_parameters(PARAM_ADSR1_ATTACK_CURVE,  blk->adsr1_attack_curve);
+  update_parameters(PARAM_ADSR1_DECAY_CURVE,   blk->adsr1_decay_curve);
+  update_parameters(PARAM_ADSR2_ATTACK_CURVE,  blk->adsr2_attack_curve);
+  update_parameters(PARAM_ADSR2_DECAY_CURVE,   blk->adsr2_decay_curve);
+
+  // Boolean flags
+  update_parameters(PARAM_RESONANCE_COMPENSATION, (blk->misc_flags & (1 << 0)) != 0);
+  update_parameters(PARAM_VCA_ADSR_RESTART,       (blk->misc_flags & (1 << 1)) != 0);
+  update_parameters(PARAM_VCF_ADSR_RESTART,       (blk->misc_flags & (1 << 2)) != 0);
 }
 
 // =============================================================================
@@ -411,6 +445,7 @@ static const SerialCommandDef dcoLinkCommands[] = {
   { CMD_BLOCK_OSC,        SERIAL_LEN_BLOCK_OSC,            input_handle_patch_osc_block_from_dco },
   { CMD_BLOCK_LFO,        SERIAL_LEN_BLOCK_LFO,            input_handle_patch_lfo_block_from_dco },
   { CMD_BLOCK_MOD,        SERIAL_LEN_BLOCK_MOD,            input_handle_patch_mod_block_from_dco },
+  { CMD_BLOCK_MIX,        SERIAL_LEN_BLOCK_MIX,            input_handle_patch_mix_block_from_dco },
 };
 
 static SerialCommandTable dcoLinkLut;

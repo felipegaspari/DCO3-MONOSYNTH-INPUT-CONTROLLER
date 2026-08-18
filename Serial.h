@@ -10,8 +10,7 @@
 #define DCO_RX_PORT INPUT_DCO_RX_PORT_OBJ
 #define SCREEN_PORT INPUT_SCREEN_PORT_OBJ
 
-// Sized for all domain blocks & preset scroll
-#define SERIAL_INNER_MAX_PAYLOAD 40
+#define DCO_PROTOCOL_IMPLEMENT_DMA
 
 // Shared Protocol Includes
 #include "_build_libs/DCO-PROTOCOL/serial_param_protocol.h"

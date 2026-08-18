@@ -4,8 +4,12 @@
 #include "Flow.h"
 
 class CalibrationFlow : public Flow {
+private:
+  bool confirmed = false;
+
 public:
   void onEnter() override {
+    confirmed = false;
     manualCalibration = true;
     manualCalibrationStage = 0;
     
@@ -16,7 +20,8 @@ public:
   }
 
   void onEncoder(uint8_t encIndex, uint8_t direction, uint16_t speed) override {
-    if (encIndex == 9) {
+    // Encoder 9 (Index 8): Change Calibration Stage
+    if (encIndex == 8) {
       if (direction == DIR_CW) {
         if (manualCalibrationStage < INPUT_CAL_STAGE_MAX) {
           manualCalibrationStage++;
@@ -28,8 +33,8 @@ public:
       }
       input_send_manual_cal_stage();
     }
-    // Encoder : Adjust Value / Offset
-    else if (encIndex == 8) {
+    // Encoder 8 (Index 7): Adjust Value / Offset
+    else if (encIndex == 7) {
       uint8_t index = INPUT_CAL_STAGE_TO_OSC(manualCalibrationStage);
       const int32_t step = 1 + (int32_t)speed;
 
@@ -65,18 +70,19 @@ public:
   }
 
   void onButton(uint8_t btnIndex, ButtonState state) override {
-    // Only fire when the button is released to prevent holding loops
     if (state != RELEASED) return; 
 
-    // Button 8 (Index 8): BACK/EXIT (Discard)
-    if (btnIndex == 8) {
+    // Button 8 (Index 7): BACK (Return to Calibration Menu)
+    if (btnIndex == 7) {
+      confirmed = false;
       exitActiveFlow();
     }
-    // Button 9 (Index 9): SELECT/CONFIRM (Save to DCO)
-    else if (btnIndex == 9) {
-      // Explicitly request the DCO to persist the manual array
+    // Button 9 (Index 8): SELECT/CONFIRM (Save to DCO & Exit completely)
+    else if (btnIndex == 8) {
+      confirmed = true;
+      // Store calibration on DCO
       serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_STORE, 1);
-      // Dismiss the calibration menu on the screen
+      // Dismiss the menu on the screen
       serial_send_param_change_byte(ParamId::PARAM_UI_CALIBRATION_DISMISS, 0);
       exitActiveFlow();
     }
@@ -85,6 +91,14 @@ public:
   void onExit() override {
     manualCalibration = false;
     serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_FLAG, manualCalibration);
+
+    if (confirmed) {
+      // Confirmed/saved -> Return to normal synthesizer play mode
+      currentControlMode = NORMAL;
+    } else {
+      // Cancelled/Back -> Return control to the Calibration Menu tabs
+      currentControlMode = CALIBRATION_MENU;
+    }
   }
 };
 

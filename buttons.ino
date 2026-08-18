@@ -21,16 +21,50 @@ static void toggle_wave_key(uint8_t key) {
 // CALIBRATION_MENU entries in menuPos order, following the Screen's calibration
 // tabs. calibrationFlag picks the stage on the DCO (PARAM_CALIBRATION_FLAG);
 // followUp instead re-dispatches a button action (e.g. enter manual cal).
-struct CalibrationMenuEntry {
-  uint8_t calibrationFlag;
-  ButtonAction followUp;
+// =============================================================================
+// CALIBRATION MENU ACTIONS & HANDLERS
+// =============================================================================
+
+// Option 0: Auto Calibration (Amp-Comp Tables)
+static void cal_action_auto_amp_comp() {
+  // Tell the DCO to run the automated amplitude compensation routine
+  serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 9, /*sendToAll=*/true);
+  
+  // (Optional) Send a UI signal or toast to the Screen if needed
+  // serial_send_signal(SIGNAL_CALIBRATION_RUNNING);
+}
+
+// Option 1: Pulse Width (PW) Calibration
+static void cal_action_pw_calibration() {
+  // Tell the DCO to run PW center & limit calibration
+  serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 2, /*sendToAll=*/true);
+  
+  // (Optional) Send any custom PW test parameters here
+}
+
+// Option 2: Full Calibration Routine (PW + Amp-Comp)
+static void cal_action_full_routine() {
+  // Tell the DCO to run the full calibration sequence
+  serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 3, /*sendToAll=*/true);
+}
+
+// Option 3: Manual Calibration Flow
+// Option 3: Manual Calibration Flow
+static void cal_action_manual_flow() {
+  // Launch the flow directly! (The Flow manages the screen and mode transitions)
+  enterFlow(&calibrationFlow);
+}
+
+// The Menu Table mapping menuPos (0..3) to the functions above
+struct CalibrationMenuOption {
+  void (*handler)();
 };
 
-static const CalibrationMenuEntry calibrationMenu[] = {
-    {1, BTN_ACTION_NONE},    // AUTO CALIBRATION: amp-comp tables only
-    {2, BTN_ACTION_NONE},    // PW CALIBRATION: PW center + limits only
-    {3, BTN_ACTION_NONE},    // FULL CALIBRATION: PW stage, then amp-comp
-    {0, TG_MAN_CALIBRATION}, // MANUAL CALIBRATION
+static const CalibrationMenuOption calibrationMenu[] = {
+  { cal_action_auto_amp_comp },  // Pos 0
+  { cal_action_pw_calibration }, // Pos 1
+  { cal_action_full_routine },   // Pos 2
+  { cal_action_manual_flow },    // Pos 3
 };
 
 static constexpr int8_t CALIBRATION_MENU_POS_MAX =
@@ -49,44 +83,23 @@ static void exit_manual_calibration(controlMode returnTo) {
 static ButtonAction __not_in_flash_func(handle_mode_buttons)(ButtonAction action) {
   switch (currentControlMode) {
 
-    // case MANUAL_CALIBRATION:
-    //   switch (action) {
-    //     case EXIT:
-    //     case BACK:
-    //       exit_manual_calibration(CALIBRATION_MENU);
-    //       return BTN_ACTION_NONE;
-    //     case SELECT:
-    //       return BTN_ACTION_NONE;
-    //     case CONFIRM:
-    //       exit_manual_calibration(NORMAL);
-    //       serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_STORE, 1);
-    //       serial_send_param_change_byte(ParamId::PARAM_UI_CALIBRATION_DISMISS, 0);
-    //       return BTN_ACTION_NONE;
-    //     default:
-    //       break;
-    //   }
-    //   break;
-
     case CALIBRATION_MENU:
       switch (action) {
         case EXIT:
         case BACK:
+          // User clicked Exit/Back (Button 8): Close menu
           currentControlMode = NORMAL;
           serial_send_param_change_byte(ParamId::PARAM_UI_CALIBRATION_DISMISS, 0);
           return BTN_ACTION_NONE;
+
         case SELECT:
+        case CONFIRM:
+          // User clicked Select (Button 9): Run the chosen calibration action!
           if (menuPos >= 0 && menuPos <= CALIBRATION_MENU_POS_MAX) {
-            const CalibrationMenuEntry& entry = calibrationMenu[menuPos];
-            if (entry.followUp != BTN_ACTION_NONE) {
-              return entry.followUp;
-            }
-            if (entry.calibrationFlag != 0) {
-              serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, entry.calibrationFlag);
-            }
+            calibrationMenu[menuPos].handler();
           }
           return BTN_ACTION_NONE;
-        case CONFIRM:
-          return BTN_ACTION_NONE;
+
         default:
           break;
       }
@@ -376,37 +389,38 @@ void __not_in_flash_func(read_encoder_buttons)() {
     ButtonStruct& button = buttons[i];
     button.button_n.update(valorMUX1[button.pin], 50, LOW);
 
-    // Extract the exact state of the physical button
-    ButtonState state = BTN_STATE_NONE;
-    if (button.button_n.held()) state = HELD;
-    else if (button.button_n.doublePressed()) state = DOUBLE;
-    else if (button.button_n.pressed()) state = PRESSED;
-    else if (button.button_n.released(true)) state = RELEASED;
-
     // =========================================================================
-    // THE FLOW INTERCEPTOR
-    // If a Flow is running, hand the button events directly to it!
+    // 1. FLOW INTERCEPTION
     // =========================================================================
     if (activeFlow != nullptr) {
-      if (state != BTN_STATE_NONE) {
-        activeFlow->onButton(i, state);
+      if (button.button_n.held()) {
+        activeFlow->onButton(i, HELD);
+      } else if (button.button_n.released(true)) {
+        activeFlow->onButton(i, RELEASED);
       }
-      continue; // Skip all normal synth actions!
+      continue; // Flow handles it directly
     }
 
-    // --- Normal Synth Operation Below ---
+    // =========================================================================
+    // 2. SYNTH CONTROLS (NORMAL vs MENU / CALIBRATION)
+    // =========================================================================
     ButtonAction action = BTN_ACTION_NONE;
+    ButtonState state = BTN_STATE_NONE;
 
     if (currentControlMode == NORMAL) {
       if (button.button_n.latched()) {
         handleLatchedButton(i);
-      } else if (state == HELD) {
+      } else if (button.button_n.held()) {
+        state = HELD;
         action = handleHeldButton(i);
-      } else if (state == DOUBLE) {
+      } else if (button.button_n.doublePressed()) {
+        state = DOUBLE;
         action = handleDoublePressedButton(i);
-      } else if (state == PRESSED) {
+      } else if (button.button_n.pressed()) {
+        state = PRESSED;
         action = handlePressedButton(i);
-      } else if (state == RELEASED) {
+      } else if (button.button_n.released(true)) {
+        state = RELEASED;
         action = handleReleasedButton(i);
       } else if (button.button_n.unlatched()) {
         handleUnlatchedButton(i);
@@ -423,9 +437,10 @@ void __not_in_flash_func(read_encoder_buttons)() {
       }
 
     } else {
-      if (state == HELD) {
+      // In Menu & Calibration modes, directly check held vs released:
+      if (button.button_n.held()) {
         action = button.actionMenuNavigationHeld;
-      } else if (state == RELEASED) {
+      } else if (button.button_n.released(true)) {
         action = button.actionMenuNavigationReleased;
       }
       action = handle_mode_buttons(action);
