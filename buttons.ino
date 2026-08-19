@@ -48,7 +48,13 @@ static void cal_action_full_routine() {
   serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 3, /*sendToAll=*/true);
 }
 
-// Option 3: Manual Calibration Flow
+// Option 3: Refine Amp-Comp Tables
+static void cal_action_refine_amp_comp() {
+  // Tell the DCO to run the refine amplitude compensation routine
+  serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 5, /*sendToAll=*/true);
+}
+
+// Option 4: Manual Calibration Flow
 // Option 3: Manual Calibration Flow
 static void cal_action_manual_flow() {
   // Launch the flow directly! (The Flow manages the screen and mode transitions)
@@ -65,6 +71,7 @@ static const CalibrationMenuOption calibrationMenu[] = {
   { cal_action_pw_calibration }, // Pos 1
   { cal_action_full_routine },   // Pos 2
   { cal_action_manual_flow },    // Pos 3
+  { cal_action_refine_amp_comp },    // Pos 4
 };
 
 static constexpr int8_t CALIBRATION_MENU_POS_MAX =
@@ -163,29 +170,19 @@ static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
     break;
 
   case TG_ADSR1_RESTART:
-    if (ADSR1CurveSelect == true) {
-      ADSR1CurveSelect = false;
-      serial_send_param_change_byte(ParamId::PARAM_ADSR1_ATTACK_CURVE, -1);
-    } else {
       if (buttonActionIsSelected) {
         VCAADSRRestart = !VCAADSRRestart;
       }
       serial_send_param_change_byte(ParamId::PARAM_VCA_ADSR_RESTART,
                                     VCAADSRRestart);
-    }
     break;
 
   case TG_ADSR2_RESTART:
-    if (ADSR2CurveSelect == true) {
-      ADSR2CurveSelect = false;
-      serial_send_param_change_byte(ParamId::PARAM_ADSR2_ATTACK_CURVE, -1);
-    } else {
       if (buttonActionIsSelected) {
         VCFADSRRestart = !VCFADSRRestart;
       }
       serial_send_param_change_byte(ParamId::PARAM_VCF_ADSR_RESTART,
                                     VCFADSRRestart);
-    }
     break;
 
   case TG_LFO1_WAVE:
@@ -218,10 +215,40 @@ static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
     serial_send_param_change_byte(ParamId::PARAM_VOICE_MODE, voiceMode);
     break;
 
-  case TG_FUNC:
-    funcKeyOn = !funcKeyOn;
-    serial_send_param_change_byte(ParamId::PARAM_FUNCTION_KEY,
-                                  (uint8_t)funcKeyOn);
+    case TG_FUNC:
+    funcKeyMode++;
+    if (funcKeyMode > 2) funcKeyMode = 0;
+    serial_send_param_change_byte(ParamId::PARAM_FUNCTION_KEY, funcKeyMode);
+    break;
+
+  case TG_VOICE_ALLOC_MODE:
+    if (buttonActionIsSelected) {
+      voiceAllocMode++;
+      if (voiceAllocMode > 5) voiceAllocMode = 0;
+    }
+    serial_send_param_change_byte(ParamId::PARAM_VOICE_ALLOC_MODE, voiceAllocMode);
+    break;
+
+  case TG_SOFT_SYNC:
+    if (buttonActionIsSelected) {
+      softSync++;
+      if (softSync > 3) softSync = 0;
+    }
+    serial_send_param_change_byte(ParamId::PARAM_SOFT_SYNC, softSync);
+    break;
+
+  case TG_PORTAMENTO_MODE:
+    if (buttonActionIsSelected) {
+      portamentoMode = !portamentoMode;
+    }
+    serial_send_param_change_byte(ParamId::PARAM_PORTAMENTO_MODE, portamentoMode);
+    break;
+
+  case TG_ADSR3_PITCH_MODE:
+    if (buttonActionIsSelected) {
+      env_dco_pitch_centered = !env_dco_pitch_centered;
+    }
+    serial_send_param_change_byte(ParamId::PARAM_ADSR3_PITCH_MODE, env_dco_pitch_centered);
     break;
 
   case TG_MAN_FADERS:
@@ -303,20 +330,6 @@ static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
       }
     }
     serial_send_param_change_byte(ParamId::PARAM_SYNC_MODE, syncMode);
-    break;
-
-  case ADSR1_CURVE_SEL:
-    if (buttonActionIsSelected) {
-      ADSR1CurveSelect = !ADSR1CurveSelect;
-    }
-    serial_send_param_change_byte(ParamId::PARAM_ADSR1_ATTACK_CURVE, -1);
-    break;
-
-  case ADSR2_CURVE_SEL:
-    if (buttonActionIsSelected) {
-      ADSR2CurveSelect = !ADSR2CurveSelect;
-    }
-    serial_send_param_change_byte(ParamId::PARAM_ADSR2_ATTACK_CURVE, -1);
     break;
 
   case TG_ADSR3_TO_OSC_SELECT:
@@ -452,6 +465,7 @@ void __not_in_flash_func(read_encoder_buttons)() {
   }
 }
 
+
 // Latched-button bookkeeping for button index i (wave keys only).
 void __not_in_flash_func(handleLatchedButton)(int i) {
   if (i <= LATCHABLE_BUTTON_MAX) {
@@ -461,24 +475,20 @@ void __not_in_flash_func(handleLatchedButton)(int i) {
   }
 }
 
-// Resolve held-button action for button index i.
 ButtonAction __not_in_flash_func(handleHeldButton)(int i) {
   ButtonStruct &button = buttons[i];
-  return funcKeyOn ? button.actionHeldAlt : button.actionHeld;
+  if (funcKeyMode == 2) return button.actionHeldAlt2;
+  if (funcKeyMode == 1) return button.actionHeldAlt;
+  return button.actionHeld;
 }
 
-// Resolve double-press action for button index i.
-ButtonAction __not_in_flash_func(handleDoublePressedButton)(int i) {
-  return buttons[i].actionDouble;
-}
-
-// Resolve press action for button index i.
 ButtonAction __not_in_flash_func(handlePressedButton)(int i) {
   ButtonStruct &button = buttons[i];
-  return funcKeyOn ? button.actionPressedAlt : button.actionPressed;
+  if (funcKeyMode == 2) return button.actionPressedAlt2;
+  if (funcKeyMode == 1) return button.actionPressedAlt;
+  return button.actionPressed;
 }
 
-// Resolve release action for button index i (also clears any latch state).
 ButtonAction __not_in_flash_func(handleReleasedButton)(int i) {
   ButtonStruct &button = buttons[i];
   if (i <= LATCHABLE_BUTTON_MAX) {
@@ -486,7 +496,14 @@ ButtonAction __not_in_flash_func(handleReleasedButton)(int i) {
     set_LED_Status(LED_REFRESH_ALL, 0);
     LED_Control_Mux.blinkPin(LEDPins[i], 0);
   }
-  return funcKeyOn ? button.actionReleasedAlt : button.actionReleased;
+  if (funcKeyMode == 2) return button.actionReleasedAlt2;
+  if (funcKeyMode == 1) return button.actionReleasedAlt;
+  return button.actionReleased;
+}
+
+// Resolve double-press action for button index i.
+ButtonAction __not_in_flash_func(handleDoublePressedButton)(int i) {
+  return buttons[i].actionDouble;
 }
 
 // Unlatch bookkeeping for button index i (wave keys only).

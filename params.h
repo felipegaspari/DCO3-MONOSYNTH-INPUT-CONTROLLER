@@ -145,9 +145,6 @@ uint16_t ADSR3_decay;
 uint16_t ADSR3_sustain;
 uint16_t ADSR3_release;
 
-bool ADSR1CurveSelect = false;
-bool ADSR2CurveSelect = false;
-
 int8_t ADSR1AttackCurveVal = 0;
 int8_t ADSR1DecayCurveVal = 0;
 int8_t ADSR2AttackCurveVal = 0;

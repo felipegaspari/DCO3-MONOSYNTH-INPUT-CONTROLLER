@@ -167,7 +167,7 @@ bool presetSaved = true;
 
 byte loadedName[17];
 
-bool funcKeyOn = false;
+byte funcKeyMode = 0;
 
 uint8_t presetSelectVal = 0;
 

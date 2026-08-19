@@ -10,18 +10,13 @@ enum EncoderAction {
   ACTION_NONE,
 
   ACTION_portamento_time,
-
   ACTION_LFO1_to_DCO,
-
   ACTION_VCF_keytrack,
-
   ACTION_velocity_to_VCF,
   ACTION_velocity_to_VCA,
-
   ACTION_SQR1_level,
   ACTION_SQR2_level,
   ACTION_SUB_level,
-
   ACTION_octave,
   ACTION_OSC2_interval,
   ACTION_OSC3_interval,
@@ -31,39 +26,31 @@ enum EncoderAction {
   ACTION_ANALOG_DRIFT,
   ACTION_ANALOG_DRIFT_SPEED,
   ACTION_ANALOG_DRIFT_SPREAD,
-
   ACTION_LFO2_to_OSC2,
   ACTION_LFO2_to_OSC3,
-
   ACTION_osc_sync_mode,
-
   ACTION_LFO1_speed,
   ACTION_LFO2_speed,
-
   ACTION_VCA_level,
-
   ACTION_LFO1_to_VCA,
   ACTION_LFO2_to_PWM,
-
   ACTION_ADSR3_to_PWM,
   ACTION_ADSR3_to_DETUNE1,
-  ACTION_ADSR_CURVE_ATTACK,
-  ACTION_ADSR_CURVE_DECAY,
 
   ACTION_ADSR1_ATTACK_CURVE,
   ACTION_ADSR1_DECAY_CURVE,
   ACTION_ADSR2_ATTACK_CURVE,
   ACTION_ADSR2_DECAY_CURVE,
 
+  ACTION_LFO1_to_OSC1,         
+  ACTION_LFO1_to_OSC2,         
+  ACTION_LFO2_to_OSC2_coarse,  
+
   ACTION_select_preset,
-
   ACTION_select_char,
-
   ACTION_select_char_pos,
-
   ACTION_CALIBRATION_OFFSET,
   ACTION_CALIBRATION_STAGE,
-
   ACTION_MENU_VALUE,
   ACTION_MENU_POS,
 };
@@ -95,6 +82,7 @@ struct EncoderStruct {
   uint8_t muxPin2;
   EncoderAction actions[3];
   EncoderAction actionsAlt[3];
+  EncoderAction actionsAlt2[3];
 };
 
 #if INPUT_HAS_OSC3_PANEL
@@ -108,17 +96,18 @@ struct EncoderStruct {
 #endif
 
 EncoderStruct encoders[] = {
-  { enc1, 13, 14, { ACTION_LFO1_to_DCO,   ACTION_ADSR3_to_DETUNE1, ACTION_NONE },       { ACTION_ADSR3_to_DETUNE1, ACTION_NONE,                ACTION_NONE } },
-  { enc2, 10, 11, { ACTION_osc_sync_mode, ACTION_NONE,             ACTION_NONE },       { ACTION_portamento_time,  ACTION_NONE,                ACTION_NONE } },
-  { enc3,  7,  8, { ACTION_octave,        ACTION_OSC2_interval,    ENC_OSC3_INTERVAL }, { ACTION_OSC2_interval,    ENC_OSC3_INTERVAL,          ACTION_ADSR_CURVE_ATTACK } },
-  { enc4,  4,  5, { ACTION_SQR1_level,    ACTION_NONE,             ACTION_NONE },       { ACTION_ANALOG_DETUNE,    ACTION_NONE,                ACTION_ADSR_CURVE_DECAY } },
-  { enc5,  1,  2, { ACTION_OSC2_detune,   ACTION_LFO2_to_OSC2,     ENC_OSC3_DETUNE },   { ACTION_ANALOG_DRIFT,     ACTION_ANALOG_DRIFT_SPEED,  ENC_LFO2_TO_OSC3 } },
-  { enc6, 30, 31, { ACTION_SQR2_level,    ACTION_NONE,             ACTION_NONE },       { ACTION_VCF_keytrack,     ACTION_ANALOG_DRIFT_SPREAD, ACTION_NONE } },
-  { enc7, 27, 28, { ACTION_SUB_level,     ACTION_NONE,             ACTION_NONE },       { ACTION_velocity_to_VCA,  ACTION_NONE,                ACTION_NONE } },
-  { enc8, 24, 25, { ACTION_LFO1_speed,    ACTION_select_char,      ACTION_NONE },       { ACTION_velocity_to_VCF,  ACTION_NONE,                ACTION_NONE } },
-  { enc9, 21, 22, { ACTION_LFO2_speed,    ACTION_select_char_pos,  ACTION_NONE },       { ACTION_select_preset,    ACTION_select_preset,       ACTION_NONE } },
-  { enc10, 42, 17, { ACTION_LFO1_to_VCA,  ACTION_NONE,             ACTION_NONE },       { ACTION_VCA_level,        ACTION_NONE,                ACTION_NONE } },
-  { enc11, 18, 19, { ACTION_LFO2_to_PWM,  ACTION_NONE,             ACTION_NONE },       { ACTION_ADSR3_to_PWM,     ACTION_NONE,                ACTION_NONE } },
+  //       pins     actions (normal)                                            actionsAlt (Func 1)                                          actionsAlt2 (Func 2)
+  { enc1,  13, 14, { ACTION_LFO1_to_DCO,   ACTION_ADSR3_to_DETUNE1, ACTION_NONE }, { ACTION_ADSR3_to_DETUNE1, ACTION_NONE,               ACTION_NONE }, { ACTION_LFO1_to_OSC1,       ACTION_NONE, ACTION_NONE } },
+  { enc2,  10, 11, { ACTION_osc_sync_mode, ACTION_NONE,             ACTION_NONE }, { ACTION_portamento_time,  ACTION_NONE,               ACTION_NONE }, { ACTION_LFO1_to_OSC2,       ACTION_NONE, ACTION_NONE } },
+  { enc3,   7,  8, { ACTION_octave,        ACTION_OSC2_interval,    ENC_OSC3_INTERVAL }, { ACTION_OSC2_interval,    ENC_OSC3_INTERVAL,         ACTION_NONE }, { ACTION_ADSR1_ATTACK_CURVE, ACTION_NONE, ACTION_NONE } },
+  { enc4,   4,  5, { ACTION_SQR1_level,    ACTION_NONE,             ACTION_NONE }, { ACTION_ANALOG_DETUNE,    ACTION_NONE,               ACTION_NONE }, { ACTION_ADSR1_DECAY_CURVE,  ACTION_NONE, ACTION_NONE } },
+  { enc5,   1,  2, { ACTION_OSC2_detune,   ACTION_LFO2_to_OSC2,     ENC_OSC3_DETUNE },   { ACTION_ANALOG_DRIFT,     ACTION_ANALOG_DRIFT_SPEED, ENC_LFO2_TO_OSC3 }, { ACTION_ADSR2_ATTACK_CURVE, ACTION_NONE, ACTION_NONE } },
+  { enc6,  30, 31, { ACTION_SQR2_level,    ACTION_NONE,             ACTION_NONE }, { ACTION_VCF_keytrack,     ACTION_ANALOG_DRIFT_SPREAD,ACTION_NONE }, { ACTION_ADSR2_DECAY_CURVE,  ACTION_NONE, ACTION_NONE } },
+  { enc7,  27, 28, { ACTION_SUB_level,     ACTION_NONE,             ACTION_NONE }, { ACTION_velocity_to_VCA,  ACTION_NONE,               ACTION_NONE }, { ACTION_NONE,               ACTION_NONE, ACTION_NONE } },
+  { enc8,  24, 25, { ACTION_LFO1_speed,    ACTION_select_char,      ACTION_NONE }, { ACTION_velocity_to_VCF,  ACTION_NONE,               ACTION_NONE }, { ACTION_NONE,               ACTION_NONE, ACTION_NONE } },
+  { enc9,  21, 22, { ACTION_LFO2_speed,    ACTION_select_char_pos,  ACTION_NONE }, { ACTION_select_preset,    ACTION_select_preset,      ACTION_NONE }, { ACTION_select_preset,      ACTION_select_preset, ACTION_NONE } },
+  { enc10, 42, 17, { ACTION_LFO1_to_VCA,   ACTION_NONE,             ACTION_NONE }, { ACTION_VCA_level,        ACTION_NONE,               ACTION_NONE }, { ACTION_NONE,               ACTION_NONE, ACTION_NONE } },
+  { enc11, 18, 19, { ACTION_LFO2_to_PWM,   ACTION_NONE,             ACTION_NONE }, { ACTION_ADSR3_to_PWM,     ACTION_NONE,               ACTION_NONE }, { ACTION_LFO2_to_OSC2_coarse,ACTION_NONE, ACTION_NONE } },
 };
 
 // Preset Save Mode Tables: only the relevant encoders have actions, all others are ACTION_NONE

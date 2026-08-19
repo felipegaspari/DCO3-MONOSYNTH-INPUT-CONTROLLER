@@ -64,6 +64,20 @@ static EncoderParamBinding encoderParamBindings[] = {
      ParamId::PARAM_ANALOG_DRIFT_SPEED, 0},
     {ACTION_ANALOG_DRIFT_SPREAD, &analogDriftSpread, ENC_VAL_I16, 1, 127, 1, 1,
      ParamId::PARAM_ANALOG_DRIFT_SPREAD, 0},
+    {ACTION_ADSR1_ATTACK_CURVE, &ADSR1AttackCurveVal, ENC_VAL_I8, 0, 7, 1, 0,
+     ParamId::PARAM_ADSR1_ATTACK_CURVE, 0},
+    {ACTION_ADSR1_DECAY_CURVE, &ADSR1DecayCurveVal, ENC_VAL_I8, 0, 7, 1, 0,
+     ParamId::PARAM_ADSR1_DECAY_CURVE, 0},
+    {ACTION_ADSR2_ATTACK_CURVE, &ADSR2AttackCurveVal, ENC_VAL_I8, 0, 7, 1, 0,
+     ParamId::PARAM_ADSR2_ATTACK_CURVE, 0},
+    {ACTION_ADSR2_DECAY_CURVE, &ADSR2DecayCurveVal, ENC_VAL_I8, 0, 7, 1, 0,
+     ParamId::PARAM_ADSR2_DECAY_CURVE, 0},
+    {ACTION_LFO1_to_OSC1, &LFO1toOSC1, ENC_VAL_I8, 0, 255, 1, 2,
+     ParamId::PARAM_LFO1_TO_OSC1, 0},
+    {ACTION_LFO1_to_OSC2, &LFO1toOSC2, ENC_VAL_I8, 0, 255, 1, 2,
+     ParamId::PARAM_LFO1_TO_OSC2, 0},
+    {ACTION_LFO2_to_OSC2_coarse, &LFO2toOSC2_coarse, ENC_VAL_U16, 0, 511, 1, 2,
+     ParamId::PARAM_LFO2_TO_OSC2_COARSE, ENC_SEND_WORD},
 };
 
 static constexpr uint8_t NUM_ENCODER_BINDINGS =
@@ -125,14 +139,13 @@ static bool __not_in_flash_func(encoder_apply_binding)(EncoderAction action,
   return false;
 }
 
-// Map a detent on encoder i to an action for the current control mode.
 static EncoderAction __not_in_flash_func(resolve_encoder_action)(const EncoderStruct& encoder, int i) {
   switch (currentControlMode) {
     case NORMAL: {
       EncoderAction action;
-      if (ADSR1CurveSelect || ADSR2CurveSelect) {
-        action = encoder.actionsAlt[2];
-      } else if (funcKeyOn) {
+      if (funcKeyMode == 2) {
+        action = buttonIsLatched[i] ? encoder.actionsAlt2[1] : encoder.actionsAlt2[0];
+      } else if (funcKeyMode == 1) {
         action = buttonIsLatched[i] ? encoder.actionsAlt[1] : encoder.actionsAlt[0];
       } else {
         action = buttonIsLatched[i] ? encoder.actions[1] : encoder.actions[0];
@@ -154,7 +167,6 @@ static EncoderAction __not_in_flash_func(resolve_encoder_action)(const EncoderSt
   }
   return ACTION_NONE;
 }
-
 // Core0 ~99 µs: read all encoders and dispatch EncoderAction (ParamId / UI /
 // cal).
 void __not_in_flash_func(read_encoders)() {
@@ -190,32 +202,6 @@ void __not_in_flash_func(read_encoders)() {
     }
 
     switch (currentAction) {
-      case ACTION_ADSR_CURVE_ATTACK:
-        {
-          int a = 0;
-          if (encoderActionIsSelected) a = (direction == DIR_CW) ? 1 : -1;
-          if (ADSR1CurveSelect == true) {
-            ADSR1AttackCurveVal = constrain(ADSR1AttackCurveVal + a, 0, 7);
-            serial_send_param_change_byte(ParamId::PARAM_ADSR1_ATTACK_CURVE, (uint8_t)ADSR1AttackCurveVal);
-          } else if (ADSR2CurveSelect == true) {
-            ADSR2AttackCurveVal = constrain(ADSR2AttackCurveVal + a, 0, 7);
-            serial_send_param_change_byte(ParamId::PARAM_ADSR2_ATTACK_CURVE, (uint8_t)ADSR2AttackCurveVal);
-          }
-          break;
-        }
-      case ACTION_ADSR_CURVE_DECAY:
-        {
-          int a = 0;
-          if (encoderActionIsSelected) a = (direction == DIR_CW) ? 1 : -1;
-          if (ADSR1CurveSelect == true) {
-            ADSR1DecayCurveVal = constrain(ADSR1DecayCurveVal + a, 0, 7);
-            serial_send_param_change_byte(ParamId::PARAM_ADSR1_DECAY_CURVE, (uint8_t)ADSR1DecayCurveVal);
-          } else if (ADSR2CurveSelect == true) {
-            ADSR2DecayCurveVal = constrain(ADSR2DecayCurveVal + a, 0, 7);
-            serial_send_param_change_byte(ParamId::PARAM_ADSR2_DECAY_CURVE, (uint8_t)ADSR2DecayCurveVal);
-          }
-          break;
-        }
       case ACTION_select_preset:
             {
               int tempPreset = (int)presetSelectVal;
