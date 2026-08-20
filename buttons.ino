@@ -188,7 +188,7 @@ static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
   case TG_LFO1_WAVE:
     if (buttonActionIsSelected) {
       LFO1Waveform++;
-      if (LFO1Waveform > 4) {
+      if (LFO1Waveform > 9) {
         LFO1Waveform = 1;
       }
     }
@@ -198,7 +198,7 @@ static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
   case TG_LFO2_WAVE:
     if (buttonActionIsSelected) {
       LFO2Waveform++;
-      if (LFO2Waveform > 4) {
+      if (LFO2Waveform > 9) {
         LFO2Waveform = 1;
       }
     }

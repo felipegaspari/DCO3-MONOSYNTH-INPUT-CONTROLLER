@@ -147,17 +147,15 @@ uint16_t ADSR3_release;
 
 int8_t ADSR1AttackCurveVal = 0;
 int8_t ADSR1DecayCurveVal = 0;
+int8_t ADSR1ReleaseCurveVal = 0;
 int8_t ADSR2AttackCurveVal = 0;
 int8_t ADSR2DecayCurveVal = 0;
-int8_t ADSR2_curve2Val = 0;
+int8_t ADSR2ReleaseCurveVal = 0;
+int8_t ADSR3AttackCurveVal = 0;
+int8_t ADSR3DecayCurveVal = 0;
+int8_t ADSR3ReleaseCurveVal = 0;
 
-float ADSR1_curve1 = 0.999;
-float ADSR1_curve2 = 0.997;
-//float ADSR1_curve2 = 0.995;
-float ADSR2_curve1 = 0.999f;
-float ADSR2_curve2 = 0.9985f;
-float ADSR3_curve1 = 0.997;
-float ADSR3_curve2 = 0.997;
+uint8_t vcfTriggerMode = 0;
 
 unsigned long tADSR;
 unsigned long tADSR_params;

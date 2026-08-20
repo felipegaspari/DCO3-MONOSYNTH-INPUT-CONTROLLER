@@ -86,6 +86,12 @@ static void apply_param_adsr1_attack_curve(int16_t v){ ADSR1AttackCurveVal = (in
 static void apply_param_adsr1_decay_curve(int16_t v) { ADSR1DecayCurveVal = (int8_t)v; }
 static void apply_param_adsr2_attack_curve(int16_t v){ ADSR2AttackCurveVal = (int8_t)v; }
 static void apply_param_adsr2_decay_curve(int16_t v) { ADSR2DecayCurveVal = (int8_t)v; }
+static void apply_param_adsr1_release_curve(int16_t v) { ADSR1ReleaseCurveVal = (int8_t)v; }
+static void apply_param_adsr2_release_curve(int16_t v) { ADSR2ReleaseCurveVal = (int8_t)v; }
+static void apply_param_adsr3_attack_curve(int16_t v)  { ADSR3AttackCurveVal  = (int8_t)v; }
+static void apply_param_adsr3_decay_curve(int16_t v)   { ADSR3DecayCurveVal   = (int8_t)v; }
+static void apply_param_adsr3_release_curve(int16_t v) { ADSR3ReleaseCurveVal = (int8_t)v; }
+static void apply_param_vcf_trigger_mode(int16_t v)    { vcfTriggerMode       = (uint8_t)v; }
 
 // --- Distortion, Character & PW ---
 static void apply_param_dist_drive(int16_t v) { distDrive = (uint16_t)v; }
@@ -244,6 +250,12 @@ static const ParamDescriptorT<int16_t> paramTable[] = {
   { PARAM_ADSR1_DECAY_CURVE,   apply_param_adsr1_decay_curve },
   { PARAM_ADSR2_ATTACK_CURVE,  apply_param_adsr2_attack_curve },
   { PARAM_ADSR2_DECAY_CURVE,   apply_param_adsr2_decay_curve },
+  { PARAM_ADSR1_RELEASE_CURVE, apply_param_adsr1_release_curve },
+  { PARAM_ADSR2_RELEASE_CURVE, apply_param_adsr2_release_curve },
+  { PARAM_ADSR3_ATTACK_CURVE,  apply_param_adsr3_attack_curve },
+  { PARAM_ADSR3_DECAY_CURVE,   apply_param_adsr3_decay_curve },
+  { PARAM_ADSR3_RELEASE_CURVE, apply_param_adsr3_release_curve },
+  { PARAM_VCF_TRIGGER_MODE,    apply_param_vcf_trigger_mode },
 
   { PARAM_DIST_DRIVE,          apply_param_dist_drive },
   { PARAM_DIST_MIX,            apply_param_dist_mix },
