@@ -42,8 +42,8 @@ static EncoderParamBinding encoderParamBindings[] = {
      ParamId::PARAM_LFO2_TO_OSC2, 0},
     {ACTION_LFO2_to_OSC3, &LFO2toOSC3DETUNE, ENC_VAL_I16, 0, 255, 1, 1,
      ParamId::PARAM_LFO2_TO_OSC3, 0},
-    {ACTION_osc_sync_mode, &oscSyncMode, ENC_VAL_U16, 0, 225, 1, 0,
-     ParamId::PARAM_OSC_SYNC_MODE, 0},
+    {ACTION_osc_phase_sync, &oscPhaseSync, ENC_VAL_U16, 0, 225, 1, 0,
+     ParamId::PARAM_OSC_PHASE_SYNC, 0}, // TODO: Uncomment this when phase align is implemented
     {ACTION_LFO1_speed, &LFO1Speed, ENC_VAL_I16, 0, 4095, 1, 4,
      ParamId::PARAM_LFO1_SPEED, ENC_SEND_WORD},
     {ACTION_LFO2_speed, &LFO2Speed, ENC_VAL_I16, 0, 4095, 1, 4,

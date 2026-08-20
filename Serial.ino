@@ -353,7 +353,7 @@ static void __not_in_flash_func(input_handle_patch_osc_block_from_dco)(char, con
   apply_param_voice_mode(blk->voice_mode);
   apply_param_voice_alloc_mode(blk->voice_alloc_mode);
   apply_param_sync_mode(blk->sync_mode);
-  apply_param_osc_sync_mode(blk->sync_mode);
+  //apply_param_phase_align(blk->phase_align); // TODO: Uncomment this when phase align is implemented
   apply_param_soft_sync(blk->soft_sync);
   apply_param_subosc_divide(blk->subosc_divide);
 

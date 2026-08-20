@@ -54,9 +54,9 @@ static void apply_param_portamento_time(int16_t v){ portamentoTime = v; }
 static void apply_param_portamento_mode(int16_t v){ portamentoMode = (byte)v; }
 
 // --- Modes & Allocation ---
-static void apply_param_osc_sync_mode(int16_t v)   { oscSyncMode = (uint16_t)v; }
-static void apply_param_sync_mode(int16_t v)       { syncMode = (byte)v; }
+static void apply_param_osc_phase_sync(int16_t v)   { oscPhaseSync = (uint8_t)v; }
 static void apply_param_soft_sync(int16_t v)       { softSync = (uint8_t)v; }
+static void apply_param_sync_mode(int16_t v)       { syncMode = (uint8_t)v; }
 static void apply_param_subosc_divide(int16_t v)   { subOscDivide = (uint8_t)v; }
 static void apply_param_voice_mode(int16_t v)      { voiceMode = (byte)constrain(v, 0, 2); }
 static void apply_param_voice_alloc_mode(int16_t v){ voiceAllocMode = (byte)constrain(v, 0, 5); }
@@ -215,7 +215,7 @@ static const ParamDescriptorT<int16_t> paramTable[] = {
   { PARAM_PORTAMENTO_TIME,     apply_param_portamento_time },
   { PARAM_PORTAMENTO_MODE,     apply_param_portamento_mode },
 
-  { PARAM_OSC_SYNC_MODE,       apply_param_osc_sync_mode },
+  { PARAM_OSC_PHASE_SYNC,      apply_param_osc_phase_sync },
   { PARAM_SYNC_MODE,           apply_param_sync_mode },
   { PARAM_SOFT_SYNC,           apply_param_soft_sync },
   { PARAM_SUBOSC_DIVIDE,       apply_param_subosc_divide },

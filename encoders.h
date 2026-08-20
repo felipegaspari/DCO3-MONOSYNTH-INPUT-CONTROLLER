@@ -28,7 +28,7 @@ enum EncoderAction {
   ACTION_ANALOG_DRIFT_SPREAD,
   ACTION_LFO2_to_OSC2,
   ACTION_LFO2_to_OSC3,
-  ACTION_osc_sync_mode,
+  ACTION_osc_phase_sync,
   ACTION_LFO1_speed,
   ACTION_LFO2_speed,
   ACTION_VCA_level,
@@ -98,7 +98,7 @@ struct EncoderStruct {
 EncoderStruct encoders[] = {
   //       pins     actions (normal)                                            actionsAlt (Func 1)                                          actionsAlt2 (Func 2)
   { enc1,  13, 14, { ACTION_LFO1_to_DCO,   ACTION_ADSR3_to_DETUNE1, ACTION_NONE }, { ACTION_ADSR3_to_DETUNE1, ACTION_NONE,               ACTION_NONE }, { ACTION_LFO1_to_OSC1,       ACTION_NONE, ACTION_NONE } },
-  { enc2,  10, 11, { ACTION_osc_sync_mode, ACTION_NONE,             ACTION_NONE }, { ACTION_portamento_time,  ACTION_NONE,               ACTION_NONE }, { ACTION_LFO1_to_OSC2,       ACTION_NONE, ACTION_NONE } },
+  { enc2,  10, 11, { ACTION_osc_phase_sync,ACTION_NONE,             ACTION_NONE }, { ACTION_portamento_time,  ACTION_NONE,               ACTION_NONE }, { ACTION_LFO1_to_OSC2,       ACTION_NONE, ACTION_NONE } },
   { enc3,   7,  8, { ACTION_octave,        ACTION_OSC2_interval,    ENC_OSC3_INTERVAL }, { ACTION_OSC2_interval,    ENC_OSC3_INTERVAL,         ACTION_NONE }, { ACTION_ADSR1_ATTACK_CURVE, ACTION_NONE, ACTION_NONE } },
   { enc4,   4,  5, { ACTION_SQR1_level,    ACTION_NONE,             ACTION_NONE }, { ACTION_ANALOG_DETUNE,    ACTION_NONE,               ACTION_NONE }, { ACTION_ADSR1_DECAY_CURVE,  ACTION_NONE, ACTION_NONE } },
   { enc5,   1,  2, { ACTION_OSC2_detune,   ACTION_LFO2_to_OSC2,     ENC_OSC3_DETUNE },   { ACTION_ANALOG_DRIFT,     ACTION_ANALOG_DRIFT_SPEED, ENC_LFO2_TO_OSC3 }, { ACTION_ADSR2_ATTACK_CURVE, ACTION_NONE, ACTION_NONE } },
