@@ -52,6 +52,36 @@ MenuDef envelopeMenu = {
   (int8_t)(sizeof(envelopeMenuItems) / sizeof(envelopeMenuItems[0])),
 };
 
+// --- ADSR 1 Curve Menu ---
+MenuItem adsr1MenuArray[] = {
+  { ACTION_ADSR1_ATTACK_CURVE,  BTN_ACTION_NONE, ParamId::PARAM_ADSR1_ATTACK_CURVE,  nullptr },
+  { ACTION_ADSR1_DECAY_CURVE,   BTN_ACTION_NONE, ParamId::PARAM_ADSR1_DECAY_CURVE,   nullptr },
+  { ACTION_ADSR1_RELEASE_CURVE, BTN_ACTION_NONE, ParamId::PARAM_ADSR1_RELEASE_CURVE, nullptr },
+};
+MenuDef adsr1Menu = { adsr1MenuArray, 3 };
+
+// --- ADSR 2 Curve Menu ---
+MenuItem adsr2MenuArray[] = {
+  { ACTION_ADSR2_ATTACK_CURVE,  BTN_ACTION_NONE, ParamId::PARAM_ADSR2_ATTACK_CURVE,  nullptr },
+  { ACTION_ADSR2_DECAY_CURVE,   BTN_ACTION_NONE, ParamId::PARAM_ADSR2_DECAY_CURVE,   nullptr },
+  { ACTION_ADSR2_RELEASE_CURVE, BTN_ACTION_NONE, ParamId::PARAM_ADSR2_RELEASE_CURVE, nullptr },
+};
+MenuDef adsr2Menu = { adsr2MenuArray, 3 };
+
+// --- ADSR 3 Curve Menu ---
+MenuItem adsr3MenuArray[] = {
+  { ACTION_ADSR3_ATTACK_CURVE,  BTN_ACTION_NONE, ParamId::PARAM_ADSR3_ATTACK_CURVE,  nullptr },
+  { ACTION_ADSR3_DECAY_CURVE,   BTN_ACTION_NONE, ParamId::PARAM_ADSR3_DECAY_CURVE,   nullptr },
+  { ACTION_ADSR3_RELEASE_CURVE, BTN_ACTION_NONE, ParamId::PARAM_ADSR3_RELEASE_CURVE, nullptr },
+};
+MenuDef adsr3Menu = { adsr3MenuArray, 3 };
+
+// --- Placeholder Menu ---
+MenuItem placeholderMenuArray[] = {
+  { ACTION_NONE, BTN_ACTION_NONE, ParamId::PARAM_SINE_STATUS, nullptr } // Dummy item
+};
+MenuDef placeholderMenu = { placeholderMenuArray, 1 };
+
 // The open menu while currentControlMode == MENU_NAVIGATION, else nullptr
 // (CALIBRATION_MENU keeps it null: the Screen tracks that one as a tab view).
 MenuDef* currentMenu = nullptr;
