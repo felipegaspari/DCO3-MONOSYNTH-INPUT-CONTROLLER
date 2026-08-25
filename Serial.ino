@@ -422,6 +422,8 @@
    apply_param_osc3_tri((blk->wave_enables & (1u << 8)) != 0);
  
    // --- Pitch, Intervals & Voice ---
+   apply_param_osc_phase_sync(blk->osc_phase_sync);
+   apply_param_osc3_detune(blk->osc3_detune);
    apply_param_osc1_interval(blk->osc1_interval);
    apply_param_osc2_interval(blk->osc2_interval);
    apply_param_osc3_interval(blk->osc3_interval);
@@ -453,6 +455,8 @@
    apply_param_lfo1_waveform(blk->lfo1_waveform);
    apply_param_lfo2_speed(blk->lfo2_speed);
    apply_param_lfo2_waveform(blk->lfo2_waveform);
+   apply_param_lfo3_waveform(blk->lfo3_waveform);
+   apply_param_lfo3_speed(blk->lfo3_speed);
  
    // --- LFO Pitch Depths & Routings ---
    apply_param_lfo1_to_dco(blk->lfo1_to_dco);
@@ -471,7 +475,7 @@
    apply_param_adsr1_to_vca(blk->adsr1_to_vca);
    apply_param_adsr3_to_pwm(blk->adsr3_to_pwm);
    apply_param_adsr3_to_detune1(blk->adsr3_to_detune1);
-   apply_param_adsr3_pitch_mode(blk->adsr3_pitch_mode);
+   apply_param_adsr3_mode(blk->adsr3_mode);
    apply_param_adsr3_to_osc_select(blk->adsr3_to_osc_select);
  }
  
@@ -516,13 +520,15 @@
   apply_param_adsr3_attack_curve(blk->adsr3_attack_curve);   
   apply_param_adsr3_decay_curve(blk->adsr3_decay_curve);     
   apply_param_adsr3_release_curve(blk->adsr3_release_curve); 
+  apply_param_adsr1_mode(blk->adsr1_mode);
+  apply_param_adsr2_mode(blk->adsr2_mode);
   apply_param_vcf_trigger_mode(blk->vcf_trigger_mode);       
 
   // --- Hardware Flags & Restarts ---
   apply_param_res_comp((blk->misc_flags & (1 << 0)) != 0);
   apply_param_vca_restart((blk->misc_flags & (1 << 1)) != 0);
   apply_param_vcf_restart((blk->misc_flags & (1 << 2)) != 0);
-  apply_param_adsr3_enabled((blk->misc_flags & (1 << 3)) != 0);
+  apply_param_adsr3_restart((blk->misc_flags & (1 << 3)) != 0);
 }
  
  // =============================================================================

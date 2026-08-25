@@ -83,6 +83,12 @@ static EncoderParamBinding encoderParamBindings[] = {
     {ACTION_ADSR3_ATTACK_CURVE, &ADSR3AttackCurveVal, ENC_VAL_I8, 0, 7, 1, 0, ParamId::PARAM_ADSR3_ATTACK_CURVE, 0},
     {ACTION_ADSR3_DECAY_CURVE, &ADSR3DecayCurveVal, ENC_VAL_I8, 0, 7, 1, 0, ParamId::PARAM_ADSR3_DECAY_CURVE, 0},
     {ACTION_ADSR3_RELEASE_CURVE, &ADSR3ReleaseCurveVal, ENC_VAL_I8, 0, 7, 1, 0, ParamId::PARAM_ADSR3_RELEASE_CURVE, 0},
+    {ACTION_VOICE_MODE, &voiceMode, ENC_VAL_I8, 0, 2, 1, 0, ParamId::PARAM_VOICE_MODE, 0},
+    {ACTION_VOICE_ALLOC_MODE, &voiceAllocMode, ENC_VAL_I8, 0, 5, 1, 0, ParamId::PARAM_VOICE_ALLOC_MODE, 0},
+    {ACTION_SYNC_MODE, &syncMode, ENC_VAL_I8, 0, 2, 1, 0, ParamId::PARAM_SYNC_MODE, 0},
+    {ACTION_SOFT_SYNC, &softSync, ENC_VAL_I8, 0, 3, 1, 0, ParamId::PARAM_SOFT_SYNC, 0},
+    {ACTION_PORTAMENTO_MODE, &portamentoMode, ENC_VAL_I8, 0, 1, 1, 0, ParamId::PARAM_PORTAMENTO_MODE, 0},
+    {ACTION_SUBOSC_DIVIDE, &subOscDivide, ENC_VAL_I8, 0, 8, 1, 0, ParamId::PARAM_SUBOSC_DIVIDE, 0},
 };
 
 static constexpr uint8_t NUM_ENCODER_BINDINGS =
@@ -123,13 +129,13 @@ static bool __not_in_flash_func(encoder_apply_binding)(EncoderAction action,
     if (b.action != action)
       continue;
 
-    if (encoderActionIsSelected) {
-      const int32_t step = b.baseStep + ((int32_t)b.speedMultX2 * speed) / 2;
-      int32_t value = encoder_binding_read(b);
-      value += (direction == DIR_CW) ? step : -step;
-      value = constrain(value, (int32_t)b.min, (int32_t)b.max);
-      encoder_binding_write(b, value);
-    }
+      if (encoderActionIsSelected || currentControlMode == MENU_NAVIGATION) {
+        const int32_t step = b.baseStep + ((int32_t)b.speedMultX2 * speed) / 2;
+        int32_t value = encoder_binding_read(b);
+        value += (direction == DIR_CW) ? step : -step;
+        value = constrain(value, (int32_t)b.min, (int32_t)b.max);
+        encoder_binding_write(b, value);
+      }
 
     int32_t out = encoder_binding_read(b);
     if (b.flags & ENC_SEND_OFFSET_512)
@@ -220,13 +226,27 @@ void __not_in_flash_func(read_encoders)() {
               break;
             }
         break;
-      case ACTION_MENU_POS:
+
+        case ACTION_MENU_POS:
         if (direction == DIR_CW) menuPos++;
         else menuPos--;
         menuPos = constrain(menuPos, 0, menuPosMax);
         serial_send_param_change_byte(ParamId::PARAM_UI_MENU_POSITION, (uint8_t)menuPos);
+        menu_announce_item(menuPos); // Announces value over UART so screen stays in sync
         break;
-      default:
+
+        case ACTION_MENU_VALUE:
+        if (currentMenu && menuPos >= 0 && menuPos < currentMenu->count) {
+          const MenuItem& item = currentMenu->items[menuPos];
+          if (item.encAction != ACTION_NONE) {
+            encoder_apply_binding(item.encAction, direction, speed);
+          } else if (item.btnAction != BTN_ACTION_NONE) {
+            // For toggle switches (e.g. Restart ON/OFF), turning the encoder also toggles it
+            execute_button_action(item.btnAction);
+          }
+        }
+        break;
+        default:
         break;
     }
   }

@@ -68,14 +68,16 @@ uint8_t LFO1toOSC2 = 0;
 uint8_t LFO1toOSC3 = 0;
 uint16_t LFO2toOSC2_coarse = 0;
 uint16_t LFO2toOSC3_coarse = 0;
-uint8_t env_dco_pitch_centered = 0;
+
 uint8_t characterAmount = 0;
 
 float VCAResonanceCompensation = 0;
 bool RESONANCEAmpCompensation = true;
 
-bool VCFADSRRestart = true;
-bool VCAADSRRestart = true;
+bool ADSR2Restart = true;
+bool ADSR1Restart = true;
+bool ADSR3Restart = false;
+
 int16_t VCFKeytrack = 0;
 uint16_t oscPhaseSync = 0;
 
@@ -154,6 +156,10 @@ int8_t ADSR2ReleaseCurveVal = 0;
 int8_t ADSR3AttackCurveVal = 0;
 int8_t ADSR3DecayCurveVal = 0;
 int8_t ADSR3ReleaseCurveVal = 0;
+
+uint8_t ADSR1Mode = 0;
+uint8_t ADSR2Mode = 0;
+uint8_t ADSR3Mode = 0;
 
 uint8_t vcfTriggerMode = 0;
 

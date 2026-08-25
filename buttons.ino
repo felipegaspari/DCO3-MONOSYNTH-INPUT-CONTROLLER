@@ -176,20 +176,59 @@ static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
                                   RESONANCEAmpCompensation);
     break;
 
-  case TG_ADSR1_RESTART:
-    if (buttonActionIsSelected) {
-      VCAADSRRestart = !VCAADSRRestart;
+    case TG_ADSR1_RESTART:
+    if (buttonActionIsSelected || currentControlMode == MENU_NAVIGATION) {
+      ADSR1Restart = !ADSR1Restart;
     }
-    serial_send_param_change_byte(ParamId::PARAM_VCA_ADSR_RESTART,
-                                  VCAADSRRestart);
+    serial_send_param_change_byte(ParamId::PARAM_ADSR1_RESTART, ADSR1Restart);
     break;
 
   case TG_ADSR2_RESTART:
-    if (buttonActionIsSelected) {
-      VCFADSRRestart = !VCFADSRRestart;
+    if (buttonActionIsSelected || currentControlMode == MENU_NAVIGATION) {
+      ADSR2Restart = !ADSR2Restart;
     }
-    serial_send_param_change_byte(ParamId::PARAM_VCF_ADSR_RESTART,
-                                  VCFADSRRestart);
+    serial_send_param_change_byte(ParamId::PARAM_ADSR2_RESTART, ADSR2Restart);
+    break;
+
+  case TG_ENABLE_ADSR3:
+    if (buttonActionIsSelected || currentControlMode == MENU_NAVIGATION) {
+      ADSR3Enabled = !ADSR3Enabled;
+      faderRow2ControlManual = false;
+    }
+    serial_send_param_change_byte(ParamId::PARAM_ADSR3_ENABLED, (uint8_t)ADSR3Enabled);
+    LED_Control_Mux.blinkPin(LEDPins[11], ADSR3Enabled);
+    set_LED_Status(11, ADSR3Enabled);
+    break;
+
+    case TG_ADSR1_MODE:
+    if (buttonActionIsSelected || currentControlMode == MENU_NAVIGATION) {
+      ADSR1Mode = (ADSR1Mode + 1) % 3;
+    }
+    serial_send_param_change_byte(ParamId::PARAM_ADSR1_MODE, ADSR1Mode);
+    break;
+
+  case TG_ADSR2_MODE:
+    if (buttonActionIsSelected || currentControlMode == MENU_NAVIGATION) {
+      ADSR2Mode = (ADSR2Mode + 1) % 3;
+    }
+    serial_send_param_change_byte(ParamId::PARAM_ADSR2_MODE, ADSR2Mode);
+    break;
+
+  case TG_ADSR3_MODE:
+    if (buttonActionIsSelected || currentControlMode == MENU_NAVIGATION) {
+      ADSR3Mode = (ADSR3Mode + 1) % 3;
+    }
+    serial_send_param_change_byte(ParamId::PARAM_ADSR3_MODE, ADSR3Mode);
+    break;
+
+  case TG_ADSR3_TO_OSC_SELECT:
+    if (buttonActionIsSelected || currentControlMode == MENU_NAVIGATION) {
+      ADSR3ToOscSelect++;
+      if (ADSR3ToOscSelect > INPUT_ADSR3_TO_OSC_SELECT_MAX) {
+        ADSR3ToOscSelect = 0;
+      }
+    }
+    serial_send_param_change_byte(ParamId::PARAM_ADSR3_TO_OSC_SELECT, ADSR3ToOscSelect);
     break;
 
   case TG_LFO1_WAVE:
@@ -256,14 +295,6 @@ static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
                                   portamentoMode);
     break;
 
-  case TG_ADSR3_PITCH_MODE:
-    if (buttonActionIsSelected) {
-      env_dco_pitch_centered = !env_dco_pitch_centered;
-    }
-    serial_send_param_change_byte(ParamId::PARAM_ADSR3_PITCH_MODE,
-                                  env_dco_pitch_centered);
-    break;
-
   case TG_MAN_FADERS:
     faderControlManual = !faderControlManual;
     faderRow1ControlManual = faderControlManual;
@@ -326,15 +357,6 @@ static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
                                   allControlsManual);
     break;
 
-  case TG_ENABLE_ADSR3:
-    ADSR3Enabled = !ADSR3Enabled;
-    faderRow2ControlManual = false;
-    serial_send_param_change_byte(ParamId::PARAM_ADSR3_ENABLED,
-                                  (uint8_t)ADSR3Enabled);
-    LED_Control_Mux.blinkPin(LEDPins[11], ADSR3Enabled);
-    set_LED_Status(11, ADSR3Enabled);
-    break;
-
   case TG_SYNC_MODE:
     if (buttonActionIsSelected) {
       syncMode++;
@@ -343,17 +365,6 @@ static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
       }
     }
     serial_send_param_change_byte(ParamId::PARAM_SYNC_MODE, syncMode);
-    break;
-
-  case TG_ADSR3_TO_OSC_SELECT:
-    if (buttonActionIsSelected) {
-      ADSR3ToOscSelect++;
-      if (ADSR3ToOscSelect > INPUT_ADSR3_TO_OSC_SELECT_MAX) {
-        ADSR3ToOscSelect = 0;
-      }
-    }
-    serial_send_param_change_byte(ParamId::PARAM_ADSR3_TO_OSC_SELECT,
-                                  ADSR3ToOscSelect);
     break;
 
   case TG_CALIBRATION_MENU:
@@ -414,6 +425,35 @@ static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
                                   4); // Screen ID 4
     serial_send_param_change_byte(ParamId::PARAM_UI_MENU_POSITION,
                                   (uint8_t)menuPos);
+    menu_announce_item(menuPos);
+    break;
+    case TG_DCO_MENU:
+    currentMenu = &dcoMenu;
+    menuPos = 0;
+    menuPosMax = currentMenu->count - 1;
+    currentControlMode = MENU_NAVIGATION;
+    serial_send_param_change_byte(ParamId::PARAM_UI_MENU_MODE, 6); // Mode 6
+    serial_send_param_change_byte(ParamId::PARAM_UI_MENU_POSITION, (uint8_t)menuPos);
+    menu_announce_item(menuPos);
+    break;
+
+  case TG_DCO_MOD_MENU:
+    currentMenu = &dcoModMenu;
+    menuPos = 0;
+    menuPosMax = currentMenu->count - 1;
+    currentControlMode = MENU_NAVIGATION;
+    serial_send_param_change_byte(ParamId::PARAM_UI_MENU_MODE, 7); // Mode 7
+    serial_send_param_change_byte(ParamId::PARAM_UI_MENU_POSITION, (uint8_t)menuPos);
+    menu_announce_item(menuPos);
+    break;
+
+  case TG_MOD_MATRIX_MENU:
+    currentMenu = &modMatrixMenu;
+    menuPos = 0;
+    menuPosMax = currentMenu->count - 1;
+    currentControlMode = MENU_NAVIGATION;
+    serial_send_param_change_byte(ParamId::PARAM_UI_MENU_MODE, 8); // Mode 8
+    serial_send_param_change_byte(ParamId::PARAM_UI_MENU_POSITION, (uint8_t)menuPos);
     menu_announce_item(menuPos);
     break;
 

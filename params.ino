@@ -8,7 +8,6 @@ int16_t  ampCompDutyOffset[NUM_OSCILLATORS]                  = { 0 };
 uint8_t  manualCalibrationStage                              = 0;
 bool     manualCalibration                                   = false;
 
-
 // --- Wave Enables ---
 static void apply_param_osc1_saw(int16_t v)   { waveEnable[0][0] = (v != 0); ledRefreshPending = true; }
 static void apply_param_osc1_pulse(int16_t v) { waveEnable[0][1] = (v != 0); ledRefreshPending = true; }
@@ -22,16 +21,18 @@ static void apply_param_osc3_tri(int16_t v)   { waveEnable[2][2] = (v != 0); led
 
 // --- Hardware Switches & Routing ---
 static void apply_param_res_comp(int16_t v)            { RESONANCEAmpCompensation = (v != 0); }
-static void apply_param_vca_restart(int16_t v)         { VCAADSRRestart = (v != 0); }
-static void apply_param_vcf_restart(int16_t v)         { VCFADSRRestart = (v != 0); }
-static void apply_param_adsr3_enabled(int16_t v)       { ADSR3Enabled = (v != 0); }
+static void apply_param_vca_restart(int16_t v)         { ADSR1Restart = (v != 0); }
+static void apply_param_vcf_restart(int16_t v)         { ADSR2Restart = (v != 0); }
+static void apply_param_adsr3_restart(int16_t v)       { ADSR3Restart = (v != 0); }
 static void apply_param_adsr3_to_osc_select(int16_t v) { ADSR3ToOscSelect = (int8_t)constrain(v, 0, INPUT_ADSR3_TO_OSC_SELECT_MAX); }
 
 // --- LFOs ---
 static void apply_param_lfo1_waveform(int16_t v)       { LFO1Waveform = (int8_t)v; }
 static void apply_param_lfo2_waveform(int16_t v)       { LFO2Waveform = (int8_t)v; }
+static void apply_param_lfo3_waveform(int16_t v)       { LFO3Waveform = (int8_t)v; }
 static void apply_param_lfo1_speed(int16_t v)          { LFO1Speed = v; }
 static void apply_param_lfo2_speed(int16_t v)          { LFO2Speed = v; }
+static void apply_param_lfo3_speed(int16_t v)          { LFO3Speed = v; }
 static void apply_param_lfo1_to_dco(int16_t v)         { LFO1toDCO = v; }
 static void apply_param_lfo1_to_osc1(int16_t v)        { LFO1toOSC1 = (uint8_t)constrain(v, 0, 255); }
 static void apply_param_lfo1_to_osc2(int16_t v)        { LFO1toOSC2 = (uint8_t)constrain(v, 0, 255); }
@@ -80,7 +81,9 @@ static void apply_param_vca_level(int16_t v)  { VCALevel = v; }
 // --- Envelopes & Modulation ---
 static void apply_param_adsr3_to_pwm(int16_t v)     { ADSR3toPWM = (int16_t)constrain((int32_t)v - 512, -512, 511); }
 static void apply_param_adsr3_to_detune1(int16_t v) { ADSR3toDETUNE1 = v; }
-static void apply_param_adsr3_pitch_mode(int16_t v) { env_dco_pitch_centered = (v != 0) ? 1 : 0; }
+static void apply_param_adsr3_mode(int16_t v) { ADSR3Mode = (uint8_t)constrain(v, 0, 2); }
+static void apply_param_adsr2_mode(int16_t v) { ADSR2Mode = (uint8_t)constrain(v, 0, 2); }
+static void apply_param_adsr1_mode(int16_t v) { ADSR1Mode = (uint8_t)constrain(v, 0, 2); }
 static void apply_param_adsr1_to_vca(int16_t v)     { ADSR1toVCA = v; }
 static void apply_param_adsr1_attack_curve(int16_t v){ ADSR1AttackCurveVal = (int8_t)v; }
 static void apply_param_adsr1_decay_curve(int16_t v) { ADSR1DecayCurveVal = (int8_t)v; }
@@ -92,6 +95,8 @@ static void apply_param_adsr3_attack_curve(int16_t v)  { ADSR3AttackCurveVal  = 
 static void apply_param_adsr3_decay_curve(int16_t v)   { ADSR3DecayCurveVal   = (int8_t)v; }
 static void apply_param_adsr3_release_curve(int16_t v) { ADSR3ReleaseCurveVal = (int8_t)v; }
 static void apply_param_vcf_trigger_mode(int16_t v)    { vcfTriggerMode       = (uint8_t)v; }
+
+static void apply_param_adsr3_enabled(int16_t v) { } // no-op on input controller
 
 // --- Distortion, Character & PW ---
 static void apply_param_dist_drive(int16_t v) { distDrive = (uint16_t)v; }
@@ -192,15 +197,18 @@ static const ParamDescriptorT<int16_t> paramTable[] = {
   { PARAM_OSC3_TRI_ENABLE,     apply_param_osc3_tri },
 
   { PARAM_RESONANCE_COMPENSATION, apply_param_res_comp },
-  { PARAM_VCA_ADSR_RESTART,       apply_param_vca_restart },
-  { PARAM_VCF_ADSR_RESTART,       apply_param_vcf_restart },
+  { PARAM_ADSR1_RESTART,       apply_param_vca_restart },
+  { PARAM_ADSR2_RESTART,       apply_param_vcf_restart },
+  { PARAM_ADSR3_RESTART,          apply_param_adsr3_restart },
   { PARAM_ADSR3_ENABLED,          apply_param_adsr3_enabled },
   { PARAM_ADSR3_TO_OSC_SELECT,    apply_param_adsr3_to_osc_select },
 
   { PARAM_LFO1_WAVEFORM,       apply_param_lfo1_waveform },
   { PARAM_LFO2_WAVEFORM,       apply_param_lfo2_waveform },
+  { PARAM_LFO3_WAVEFORM,       apply_param_lfo3_waveform },
   { PARAM_LFO1_SPEED,          apply_param_lfo1_speed },
   { PARAM_LFO2_SPEED,          apply_param_lfo2_speed },
+  { PARAM_LFO3_SPEED,          apply_param_lfo3_speed },
   { PARAM_LFO1_TO_DCO,         apply_param_lfo1_to_dco },
   { PARAM_LFO1_TO_OSC1,        apply_param_lfo1_to_osc1 },
   { PARAM_LFO1_TO_OSC2,        apply_param_lfo1_to_osc2 },
@@ -244,7 +252,6 @@ static const ParamDescriptorT<int16_t> paramTable[] = {
 
   { PARAM_ADSR3_TO_PWM,        apply_param_adsr3_to_pwm },
   { PARAM_ADSR3_TO_DETUNE1,    apply_param_adsr3_to_detune1 },
-  { PARAM_ADSR3_PITCH_MODE,    apply_param_adsr3_pitch_mode },
   { PARAM_ADSR1_TO_VCA,        apply_param_adsr1_to_vca },
   { PARAM_ADSR1_ATTACK_CURVE,  apply_param_adsr1_attack_curve },
   { PARAM_ADSR1_DECAY_CURVE,   apply_param_adsr1_decay_curve },
@@ -255,6 +262,9 @@ static const ParamDescriptorT<int16_t> paramTable[] = {
   { PARAM_ADSR3_ATTACK_CURVE,  apply_param_adsr3_attack_curve },
   { PARAM_ADSR3_DECAY_CURVE,   apply_param_adsr3_decay_curve },
   { PARAM_ADSR3_RELEASE_CURVE, apply_param_adsr3_release_curve },
+  { PARAM_ADSR1_MODE, apply_param_adsr1_mode },
+  { PARAM_ADSR2_MODE, apply_param_adsr2_mode },
+  { PARAM_ADSR3_MODE, apply_param_adsr3_mode },
   { PARAM_VCF_TRIGGER_MODE,    apply_param_vcf_trigger_mode },
 
   { PARAM_DIST_DRIVE,          apply_param_dist_drive },

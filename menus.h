@@ -39,8 +39,8 @@ MenuItem envelopeMenuItems[] = {
   { ACTION_ADSR1_DECAY_CURVE,   BTN_ACTION_NONE,         ParamId::PARAM_ADSR1_DECAY_CURVE,   nullptr },
   { ACTION_ADSR2_ATTACK_CURVE,  BTN_ACTION_NONE,         ParamId::PARAM_ADSR2_ATTACK_CURVE,  nullptr },
   { ACTION_ADSR2_DECAY_CURVE,   BTN_ACTION_NONE,         ParamId::PARAM_ADSR2_DECAY_CURVE,   nullptr },
-  { ACTION_NONE,                TG_ADSR1_RESTART,        ParamId::PARAM_VCA_ADSR_RESTART,    (int8_t*)&VCAADSRRestart },
-  { ACTION_NONE,                TG_ADSR2_RESTART,        ParamId::PARAM_VCF_ADSR_RESTART,    (int8_t*)&VCFADSRRestart },
+  { ACTION_NONE,                TG_ADSR1_RESTART,        ParamId::PARAM_ADSR1_RESTART,    (int8_t*)&ADSR1Restart },
+  { ACTION_NONE,                TG_ADSR2_RESTART,        ParamId::PARAM_ADSR2_RESTART,    (int8_t*)&ADSR2Restart },
   { ACTION_NONE,                TG_ENABLE_ADSR3,         ParamId::PARAM_ADSR3_ENABLED,       (int8_t*)&ADSR3Enabled },
   { ACTION_NONE,                TG_ADSR3_TO_OSC_SELECT,  ParamId::PARAM_ADSR3_TO_OSC_SELECT, &ADSR3ToOscSelect },
   { ACTION_ADSR3_to_PWM,        BTN_ACTION_NONE,         ParamId::PARAM_ADSR3_TO_PWM,        nullptr },
@@ -52,29 +52,91 @@ MenuDef envelopeMenu = {
   (int8_t)(sizeof(envelopeMenuItems) / sizeof(envelopeMenuItems[0])),
 };
 
-// --- ADSR 1 Curve Menu ---
+// --- Mode 2: ADSR 1 ---
 MenuItem adsr1MenuArray[] = {
-  { ACTION_ADSR1_ATTACK_CURVE,  BTN_ACTION_NONE, ParamId::PARAM_ADSR1_ATTACK_CURVE,  nullptr },
-  { ACTION_ADSR1_DECAY_CURVE,   BTN_ACTION_NONE, ParamId::PARAM_ADSR1_DECAY_CURVE,   nullptr },
-  { ACTION_ADSR1_RELEASE_CURVE, BTN_ACTION_NONE, ParamId::PARAM_ADSR1_RELEASE_CURVE, nullptr },
+  { ACTION_ADSR1_ATTACK_CURVE,  BTN_ACTION_NONE,  ParamId::PARAM_ADSR1_ATTACK_CURVE,  nullptr },
+  { ACTION_ADSR1_DECAY_CURVE,   BTN_ACTION_NONE,  ParamId::PARAM_ADSR1_DECAY_CURVE,   nullptr },
+  { ACTION_ADSR1_RELEASE_CURVE, BTN_ACTION_NONE,  ParamId::PARAM_ADSR1_RELEASE_CURVE, nullptr },
+  { ACTION_NONE,                TG_ADSR1_RESTART, ParamId::PARAM_ADSR1_RESTART,    (int8_t*)&ADSR1Restart },
+  { ACTION_NONE,                TG_ADSR1_MODE,    ParamId::PARAM_ADSR1_MODE,          (int8_t*)&ADSR1Mode }
 };
-MenuDef adsr1Menu = { adsr1MenuArray, 3 };
+MenuDef adsr1Menu = { adsr1MenuArray, 5 };
 
-// --- ADSR 2 Curve Menu ---
+// --- Mode 3: ADSR 2 ---
 MenuItem adsr2MenuArray[] = {
-  { ACTION_ADSR2_ATTACK_CURVE,  BTN_ACTION_NONE, ParamId::PARAM_ADSR2_ATTACK_CURVE,  nullptr },
-  { ACTION_ADSR2_DECAY_CURVE,   BTN_ACTION_NONE, ParamId::PARAM_ADSR2_DECAY_CURVE,   nullptr },
-  { ACTION_ADSR2_RELEASE_CURVE, BTN_ACTION_NONE, ParamId::PARAM_ADSR2_RELEASE_CURVE, nullptr },
+  { ACTION_ADSR2_ATTACK_CURVE,  BTN_ACTION_NONE,  ParamId::PARAM_ADSR2_ATTACK_CURVE,  nullptr },
+  { ACTION_ADSR2_DECAY_CURVE,   BTN_ACTION_NONE,  ParamId::PARAM_ADSR2_DECAY_CURVE,   nullptr },
+  { ACTION_ADSR2_RELEASE_CURVE, BTN_ACTION_NONE,  ParamId::PARAM_ADSR2_RELEASE_CURVE, nullptr },
+  { ACTION_NONE,                TG_ADSR2_RESTART, ParamId::PARAM_ADSR2_RESTART,    (int8_t*)&ADSR2Restart },
+  { ACTION_NONE,                TG_ADSR2_MODE,    ParamId::PARAM_ADSR2_MODE,          (int8_t*)&ADSR2Mode }
 };
-MenuDef adsr2Menu = { adsr2MenuArray, 3 };
+MenuDef adsr2Menu = { adsr2MenuArray, 5 };
 
-// --- ADSR 3 Curve Menu ---
+// --- Mode 4: ADSR 3 ---
 MenuItem adsr3MenuArray[] = {
-  { ACTION_ADSR3_ATTACK_CURVE,  BTN_ACTION_NONE, ParamId::PARAM_ADSR3_ATTACK_CURVE,  nullptr },
-  { ACTION_ADSR3_DECAY_CURVE,   BTN_ACTION_NONE, ParamId::PARAM_ADSR3_DECAY_CURVE,   nullptr },
-  { ACTION_ADSR3_RELEASE_CURVE, BTN_ACTION_NONE, ParamId::PARAM_ADSR3_RELEASE_CURVE, nullptr },
+  { ACTION_ADSR3_ATTACK_CURVE,  BTN_ACTION_NONE,         ParamId::PARAM_ADSR3_ATTACK_CURVE,  nullptr },
+  { ACTION_ADSR3_DECAY_CURVE,   BTN_ACTION_NONE,         ParamId::PARAM_ADSR3_DECAY_CURVE,   nullptr },
+  { ACTION_ADSR3_RELEASE_CURVE, BTN_ACTION_NONE,         ParamId::PARAM_ADSR3_RELEASE_CURVE, nullptr },
+  { ACTION_NONE,                TG_ENABLE_ADSR3,         ParamId::PARAM_ADSR3_ENABLED,       (int8_t*)&ADSR3Enabled },
+  { ACTION_NONE,                TG_ADSR3_MODE,           ParamId::PARAM_ADSR3_MODE,          (int8_t*)&ADSR3Mode },
+  { ACTION_NONE,                TG_ADSR3_TO_OSC_SELECT,  ParamId::PARAM_ADSR3_TO_OSC_SELECT, &ADSR3ToOscSelect },
+  { ACTION_ADSR3_to_PWM,        BTN_ACTION_NONE,         ParamId::PARAM_ADSR3_TO_PWM,        nullptr },
+  { ACTION_ADSR3_to_DETUNE1,    BTN_ACTION_NONE,         ParamId::PARAM_ADSR3_TO_DETUNE1,    nullptr },
 };
-MenuDef adsr3Menu = { adsr3MenuArray, 3 };
+MenuDef adsr3Menu = { adsr3MenuArray, 8 };
+
+// --- Mode 6: DCO MENU ---
+#if PROJECT_INSTRUMENT == 3 
+MenuItem dcoMenuArray[] = {
+  { ACTION_VOICE_MODE,       BTN_ACTION_NONE, ParamId::PARAM_VOICE_MODE,       nullptr },
+  { ACTION_VOICE_ALLOC_MODE, BTN_ACTION_NONE, ParamId::PARAM_VOICE_ALLOC_MODE, nullptr },
+  { ACTION_octave,           BTN_ACTION_NONE, ParamId::PARAM_OSC1_INTERVAL,    nullptr },
+  { ACTION_OSC2_interval,    BTN_ACTION_NONE, ParamId::PARAM_OSC2_INTERVAL,    nullptr },
+  { ACTION_OSC3_interval,    BTN_ACTION_NONE, ParamId::PARAM_OSC3_INTERVAL,    nullptr },
+  { ACTION_osc_phase_sync,   BTN_ACTION_NONE, ParamId::PARAM_OSC_PHASE_SYNC,   nullptr },
+  { ACTION_SYNC_MODE,        BTN_ACTION_NONE, ParamId::PARAM_SYNC_MODE,        nullptr },
+  { ACTION_SOFT_SYNC,        BTN_ACTION_NONE, ParamId::PARAM_SOFT_SYNC,        nullptr }
+};
+MenuDef dcoMenu = { dcoMenuArray, 8 };
+#else
+MenuItem dcoMenuArray[] = {
+  { ACTION_VOICE_MODE,       BTN_ACTION_NONE, ParamId::PARAM_VOICE_MODE,       nullptr },
+  { ACTION_VOICE_ALLOC_MODE, BTN_ACTION_NONE, ParamId::PARAM_VOICE_ALLOC_MODE, nullptr },
+  { ACTION_octave,           BTN_ACTION_NONE, ParamId::PARAM_OSC1_INTERVAL,    nullptr },
+  { ACTION_OSC2_interval,    BTN_ACTION_NONE, ParamId::PARAM_OSC2_INTERVAL,    nullptr },
+  { ACTION_osc_phase_sync,   BTN_ACTION_NONE, ParamId::PARAM_OSC_PHASE_SYNC,   nullptr },
+  { ACTION_SYNC_MODE,        BTN_ACTION_NONE, ParamId::PARAM_SYNC_MODE,        nullptr },
+  { ACTION_SOFT_SYNC,        BTN_ACTION_NONE, ParamId::PARAM_SOFT_SYNC,        nullptr }
+};
+MenuDef dcoMenu = { dcoMenuArray, 7 };
+#endif
+
+// --- Mode 7: DCO MOD MENU ---
+#if PROJECT_INSTRUMENT == 3 
+MenuItem dcoModMenuArray[] = {
+  { ACTION_OSC2_detune,      BTN_ACTION_NONE, ParamId::PARAM_OSC2_DETUNE_VAL,  nullptr },
+  { ACTION_OSC3_detune,      BTN_ACTION_NONE, ParamId::PARAM_OSC3_DETUNE_VAL,  nullptr },
+  { ACTION_ANALOG_DETUNE,    BTN_ACTION_NONE, ParamId::PARAM_UNISON_DETUNE,    nullptr },
+  { ACTION_portamento_time,  BTN_ACTION_NONE, ParamId::PARAM_PORTAMENTO_TIME,  nullptr },
+  { ACTION_PORTAMENTO_MODE,  BTN_ACTION_NONE, ParamId::PARAM_PORTAMENTO_MODE,  nullptr },
+  { ACTION_SUBOSC_DIVIDE,    BTN_ACTION_NONE, ParamId::PARAM_SUBOSC_DIVIDE,    nullptr }
+};
+MenuDef dcoModMenu = { dcoModMenuArray, 6 };
+#else
+MenuItem dcoModMenuArray[] = {
+  { ACTION_OSC2_detune,      BTN_ACTION_NONE, ParamId::PARAM_OSC2_DETUNE_VAL,  nullptr },
+  { ACTION_ANALOG_DETUNE,    BTN_ACTION_NONE, ParamId::PARAM_UNISON_DETUNE,    nullptr },
+  { ACTION_portamento_time,  BTN_ACTION_NONE, ParamId::PARAM_PORTAMENTO_TIME,  nullptr },
+  { ACTION_PORTAMENTO_MODE,  BTN_ACTION_NONE, ParamId::PARAM_PORTAMENTO_MODE,  nullptr }
+};
+MenuDef dcoModMenu = { dcoModMenuArray, 4 };
+#endif
+
+// --- Mode 8: MOD MATRIX MENU (Stub) ---
+MenuItem modMatrixMenuArray[] = {
+  { ACTION_NONE, BTN_ACTION_NONE, ParamId::PARAM_SINE_STATUS, nullptr }
+};
+MenuDef modMatrixMenu = { modMatrixMenuArray, 1 };
 
 // --- Placeholder Menu ---
 MenuItem placeholderMenuArray[] = {
