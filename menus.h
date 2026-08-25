@@ -57,8 +57,8 @@ MenuItem adsr1MenuArray[] = {
   { ACTION_ADSR1_ATTACK_CURVE,  BTN_ACTION_NONE,  ParamId::PARAM_ADSR1_ATTACK_CURVE,  nullptr },
   { ACTION_ADSR1_DECAY_CURVE,   BTN_ACTION_NONE,  ParamId::PARAM_ADSR1_DECAY_CURVE,   nullptr },
   { ACTION_ADSR1_RELEASE_CURVE, BTN_ACTION_NONE,  ParamId::PARAM_ADSR1_RELEASE_CURVE, nullptr },
-  { ACTION_NONE,                TG_ADSR1_RESTART, ParamId::PARAM_ADSR1_RESTART,    (int8_t*)&ADSR1Restart },
-  { ACTION_NONE,                TG_ADSR1_MODE,    ParamId::PARAM_ADSR1_MODE,          (int8_t*)&ADSR1Mode }
+  { ACTION_ADSR1_RESTART,       TG_ADSR1_RESTART, ParamId::PARAM_ADSR1_RESTART,       (int8_t*)&ADSR1Restart },
+  { ACTION_ADSR1_MODE,          TG_ADSR1_MODE,    ParamId::PARAM_ADSR1_MODE,          (int8_t*)&ADSR1Mode }
 };
 MenuDef adsr1Menu = { adsr1MenuArray, 5 };
 
@@ -67,8 +67,8 @@ MenuItem adsr2MenuArray[] = {
   { ACTION_ADSR2_ATTACK_CURVE,  BTN_ACTION_NONE,  ParamId::PARAM_ADSR2_ATTACK_CURVE,  nullptr },
   { ACTION_ADSR2_DECAY_CURVE,   BTN_ACTION_NONE,  ParamId::PARAM_ADSR2_DECAY_CURVE,   nullptr },
   { ACTION_ADSR2_RELEASE_CURVE, BTN_ACTION_NONE,  ParamId::PARAM_ADSR2_RELEASE_CURVE, nullptr },
-  { ACTION_NONE,                TG_ADSR2_RESTART, ParamId::PARAM_ADSR2_RESTART,    (int8_t*)&ADSR2Restart },
-  { ACTION_NONE,                TG_ADSR2_MODE,    ParamId::PARAM_ADSR2_MODE,          (int8_t*)&ADSR2Mode }
+  { ACTION_ADSR2_RESTART,       TG_ADSR2_RESTART, ParamId::PARAM_ADSR2_RESTART,       (int8_t*)&ADSR2Restart },
+  { ACTION_ADSR2_MODE,          TG_ADSR2_MODE,    ParamId::PARAM_ADSR2_MODE,          (int8_t*)&ADSR2Mode }
 };
 MenuDef adsr2Menu = { adsr2MenuArray, 5 };
 
@@ -77,13 +77,14 @@ MenuItem adsr3MenuArray[] = {
   { ACTION_ADSR3_ATTACK_CURVE,  BTN_ACTION_NONE,         ParamId::PARAM_ADSR3_ATTACK_CURVE,  nullptr },
   { ACTION_ADSR3_DECAY_CURVE,   BTN_ACTION_NONE,         ParamId::PARAM_ADSR3_DECAY_CURVE,   nullptr },
   { ACTION_ADSR3_RELEASE_CURVE, BTN_ACTION_NONE,         ParamId::PARAM_ADSR3_RELEASE_CURVE, nullptr },
-  { ACTION_NONE,                TG_ENABLE_ADSR3,         ParamId::PARAM_ADSR3_ENABLED,       (int8_t*)&ADSR3Enabled },
-  { ACTION_NONE,                TG_ADSR3_MODE,           ParamId::PARAM_ADSR3_MODE,          (int8_t*)&ADSR3Mode },
-  { ACTION_NONE,                TG_ADSR3_TO_OSC_SELECT,  ParamId::PARAM_ADSR3_TO_OSC_SELECT, &ADSR3ToOscSelect },
+  { ACTION_ADSR3_RESTART,       BTN_ACTION_NONE,         ParamId::PARAM_ADSR3_RESTART,       (int8_t*)&ADSR3Restart },
+  { ACTION_ADSR3_MODE,          BTN_ACTION_NONE,         ParamId::PARAM_ADSR3_MODE,          (int8_t*)&ADSR3Mode },
+  { ACTION_ADSR3_to_OSC_SELECT, BTN_ACTION_NONE,         ParamId::PARAM_ADSR3_TO_OSC_SELECT, &ADSR3ToOscSelect },
   { ACTION_ADSR3_to_PWM,        BTN_ACTION_NONE,         ParamId::PARAM_ADSR3_TO_PWM,        nullptr },
   { ACTION_ADSR3_to_DETUNE1,    BTN_ACTION_NONE,         ParamId::PARAM_ADSR3_TO_DETUNE1,    nullptr },
+  { ACTION_NONE,                TG_ENABLE_ADSR3,         ParamId::PARAM_ADSR3_ENABLED,       (int8_t*)&ADSR3Enabled }
 };
-MenuDef adsr3Menu = { adsr3MenuArray, 8 };
+MenuDef adsr3Menu = { adsr3MenuArray, 9 };
 
 // --- Mode 6: DCO MENU ---
 #if PROJECT_INSTRUMENT == 3 
@@ -111,25 +112,44 @@ MenuItem dcoMenuArray[] = {
 MenuDef dcoMenu = { dcoMenuArray, 7 };
 #endif
 
-// --- Mode 7: DCO MOD MENU ---
-#if PROJECT_INSTRUMENT == 3 
+// --- Mode 7: DCO MODULATION (Detunes, Slew, Sub & LFO Pitch Routes) ---
+#if INPUT_HAS_OSC3_PANEL
 MenuItem dcoModMenuArray[] = {
-  { ACTION_OSC2_detune,      BTN_ACTION_NONE, ParamId::PARAM_OSC2_DETUNE_VAL,  nullptr },
-  { ACTION_OSC3_detune,      BTN_ACTION_NONE, ParamId::PARAM_OSC3_DETUNE_VAL,  nullptr },
-  { ACTION_ANALOG_DETUNE,    BTN_ACTION_NONE, ParamId::PARAM_UNISON_DETUNE,    nullptr },
-  { ACTION_portamento_time,  BTN_ACTION_NONE, ParamId::PARAM_PORTAMENTO_TIME,  nullptr },
-  { ACTION_PORTAMENTO_MODE,  BTN_ACTION_NONE, ParamId::PARAM_PORTAMENTO_MODE,  nullptr },
-  { ACTION_SUBOSC_DIVIDE,    BTN_ACTION_NONE, ParamId::PARAM_SUBOSC_DIVIDE,    nullptr }
+  // Original Pitch, Slew & Sub parameters
+  { ACTION_OSC2_detune,         BTN_ACTION_NONE, ParamId::PARAM_OSC2_DETUNE_VAL,     nullptr },
+  { ACTION_OSC3_detune,         BTN_ACTION_NONE, ParamId::PARAM_OSC3_DETUNE_VAL,     nullptr },
+  { ACTION_ANALOG_DETUNE,       BTN_ACTION_NONE, ParamId::PARAM_UNISON_DETUNE,       nullptr },
+  { ACTION_portamento_time,     BTN_ACTION_NONE, ParamId::PARAM_PORTAMENTO_TIME,     nullptr },
+  { ACTION_PORTAMENTO_MODE,     BTN_ACTION_NONE, ParamId::PARAM_PORTAMENTO_MODE,     nullptr },
+  { ACTION_SUBOSC_DIVIDE,       BTN_ACTION_NONE, ParamId::PARAM_SUBOSC_DIVIDE,       nullptr },
+
+  // Added LFO Pitch Routes
+  { ACTION_LFO1_to_DCO,         BTN_ACTION_NONE, ParamId::PARAM_LFO1_TO_DCO,         nullptr },
+  { ACTION_LFO1_to_OSC1,        BTN_ACTION_NONE, ParamId::PARAM_LFO1_TO_OSC1,        nullptr },
+  { ACTION_LFO1_to_OSC2,        BTN_ACTION_NONE, ParamId::PARAM_LFO1_TO_OSC2,        nullptr },
+  { ACTION_LFO1_to_OSC3,        BTN_ACTION_NONE, ParamId::PARAM_LFO1_TO_OSC3,        nullptr },
+  { ACTION_LFO2_to_OSC2,        BTN_ACTION_NONE, ParamId::PARAM_LFO2_TO_OSC2,        nullptr },
+  { ACTION_LFO2_to_OSC3,        BTN_ACTION_NONE, ParamId::PARAM_LFO2_TO_OSC3,        nullptr },
+  { ACTION_LFO2_to_OSC2_coarse, BTN_ACTION_NONE, ParamId::PARAM_LFO2_TO_OSC2_COARSE, nullptr },
+  { ACTION_LFO2_to_OSC3_coarse, BTN_ACTION_NONE, ParamId::PARAM_LFO2_TO_OSC3_COARSE, nullptr }
 };
-MenuDef dcoModMenu = { dcoModMenuArray, 6 };
+MenuDef dcoModMenu = { dcoModMenuArray, 14 };
 #else
 MenuItem dcoModMenuArray[] = {
-  { ACTION_OSC2_detune,      BTN_ACTION_NONE, ParamId::PARAM_OSC2_DETUNE_VAL,  nullptr },
-  { ACTION_ANALOG_DETUNE,    BTN_ACTION_NONE, ParamId::PARAM_UNISON_DETUNE,    nullptr },
-  { ACTION_portamento_time,  BTN_ACTION_NONE, ParamId::PARAM_PORTAMENTO_TIME,  nullptr },
-  { ACTION_PORTAMENTO_MODE,  BTN_ACTION_NONE, ParamId::PARAM_PORTAMENTO_MODE,  nullptr }
+  // Original Pitch & Slew parameters
+  { ACTION_OSC2_detune,         BTN_ACTION_NONE, ParamId::PARAM_OSC2_DETUNE_VAL,     nullptr },
+  { ACTION_ANALOG_DETUNE,       BTN_ACTION_NONE, ParamId::PARAM_UNISON_DETUNE,       nullptr },
+  { ACTION_portamento_time,     BTN_ACTION_NONE, ParamId::PARAM_PORTAMENTO_TIME,     nullptr },
+  { ACTION_PORTAMENTO_MODE,     BTN_ACTION_NONE, ParamId::PARAM_PORTAMENTO_MODE,     nullptr },
+
+  // Added LFO Pitch Routes
+  { ACTION_LFO1_to_DCO,         BTN_ACTION_NONE, ParamId::PARAM_LFO1_TO_DCO,         nullptr },
+  { ACTION_LFO1_to_OSC1,        BTN_ACTION_NONE, ParamId::PARAM_LFO1_TO_OSC1,        nullptr },
+  { ACTION_LFO1_to_OSC2,        BTN_ACTION_NONE, ParamId::PARAM_LFO1_TO_OSC2,        nullptr },
+  { ACTION_LFO2_to_OSC2,        BTN_ACTION_NONE, ParamId::PARAM_LFO2_TO_OSC2,        nullptr },
+  { ACTION_LFO2_to_OSC2_coarse, BTN_ACTION_NONE, ParamId::PARAM_LFO2_TO_OSC2_COARSE, nullptr }
 };
-MenuDef dcoModMenu = { dcoModMenuArray, 4 };
+MenuDef dcoModMenu = { dcoModMenuArray, 9 };
 #endif
 
 // --- Mode 8: MOD MATRIX MENU (Stub) ---

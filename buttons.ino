@@ -190,6 +190,13 @@ static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
     serial_send_param_change_byte(ParamId::PARAM_ADSR2_RESTART, ADSR2Restart);
     break;
 
+  case TG_ADSR3_RESTART:
+    if (buttonActionIsSelected || currentControlMode == MENU_NAVIGATION) {
+      ADSR3Restart = !ADSR3Restart;
+    }
+    serial_send_param_change_byte(ParamId::PARAM_ADSR3_RESTART, ADSR3Restart);
+    break;
+
   case TG_ENABLE_ADSR3:
     if (buttonActionIsSelected || currentControlMode == MENU_NAVIGATION) {
       ADSR3Enabled = !ADSR3Enabled;
