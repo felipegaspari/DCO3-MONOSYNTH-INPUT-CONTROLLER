@@ -72,31 +72,35 @@ public:
   void onButton(uint8_t btnIndex, ButtonState state) override {
     if (state != RELEASED) return; 
 
-    // Button 8 (Index 7): BACK (Return to Calibration Menu)
+    // Button 8 (Index 7): BACK / CANCEL (Return to Calibration Menu Tabs)
     if (btnIndex == 7) {
       confirmed = false;
       exitActiveFlow();
     }
-    // Button 9 (Index 8): SELECT/CONFIRM (Save to DCO & Exit completely)
+    // Button 9 (Index 8): SELECT / CONFIRM (Commit to DCO and Exit to Main UI)
     else if (btnIndex == 8) {
       confirmed = true;
-      // Store calibration on DCO
-      serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_STORE, 1);
-      // Dismiss the menu on the screen
-      serial_send_param_change_byte(ParamId::PARAM_UI_CALIBRATION_DISMISS, 0);
       exitActiveFlow();
     }
   }
 
   void onExit() override {
     manualCalibration = false;
-    serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_FLAG, manualCalibration);
+
+    // 1. ALWAYS notify the DCO to exit manual calibration mode
+    serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_FLAG, 0, /*sendToAll=*/true);
 
     if (confirmed) {
-      // Confirmed/saved -> Return to normal synthesizer play mode
+      // 2. Commit all values to LittleFS on the DCO
+      serial_send_param_change_byte(ParamId::PARAM_MANUAL_CALIBRATION_STORE, 1, /*sendToAll=*/true);
+      
+      // 3. Dismiss the calibration screen and return to the main dashboard
+      serial_send_param_change_byte(ParamId::PARAM_UI_CALIBRATION_DISMISS, 0, /*sendToAll=*/true);
+      
+      // 4. Return Input controller to normal playing mode
       currentControlMode = NORMAL;
     } else {
-      // Cancelled/Back -> Return control to the Calibration Menu tabs
+      // Cancelled: Return Input controller to calibration menu tabs
       currentControlMode = CALIBRATION_MENU;
     }
   }
