@@ -1,7 +1,7 @@
 
 #include "Arduino.h"
 #include "sram_hot.h"
-//#include <Adafruit_TinyUSB.h>
+#include <Adafruit_TinyUSB.h>
 
 // Derives voice count, UART wiring and panel layout from the instrument this
 // checkout belongs to, which comes from the superproject's project_config.h.
@@ -63,8 +63,19 @@ void setup() {
   init_controls();
   init_tables();
 
-  // USBDevice.setManufacturerDescriptor("FELA         ");
-  // USBDevice.setProductDescriptor("DCO4 Input Controller        ");
+  if (!TinyUSBDevice.isInitialized()) {
+    TinyUSBDevice.begin(0);
+  }
+#if INPUT_IS_DCO4
+  TinyUSBDevice.setManufacturerDescriptor("DCO4");
+  TinyUSBDevice.setProductDescriptor("DCO4 Input");
+#else
+  TinyUSBDevice.setManufacturerDescriptor("DCO3");
+  TinyUSBDevice.setProductDescriptor("DCO3 Input");
+#endif
+  TinyUSBDevice.detach();
+  delay(10);
+  TinyUSBDevice.attach();
 }
 
 void setup1() {
@@ -137,6 +148,7 @@ void __not_in_flash_func(loop1)() {
   if (timer1msFlag2) {
     setControlValues();  //LO HACE EL INPUT BOARD
     serial_send_manual_controls(false);
+    LED_Control_Mux.update();
   }
 
   if (ledRefreshPending) {
@@ -145,7 +157,7 @@ void __not_in_flash_func(loop1)() {
   }
 
   if (timer31msFlag2) {
-    LED_Control_Mux.update();
+
   }
 
   if (timer200msFlag2) {
@@ -182,14 +194,14 @@ void __not_in_flash_func(loop)() {
   // unsigned long tiempodeejecuciontotal = micros() - i;
 
   //Serial.println(tiempodeejecuciontotal);
-  if (timer200msFlag) {
+ // if (timer200msFlag) {
     //serial_send_param_change(22, ADSR1Level[0]);
     //drawTM(RESONANCE);
     //drawTM(CUTOFF);
     //serial_send_param_change(15, ADSR3toDETUNE1_formula * 100000);
     //Serial.println(tiempodeejecuciontotal);
   
-  }
+ // }
 
 
   // if (tiempodeejecuciontotal > 600) {
@@ -201,10 +213,9 @@ void __not_in_flash_func(loop)() {
   // drawTMScreen(true);
   // }
 
-#ifdef ENABLE_SERIAL
   //drawTM(tiempodeejecucion);
   if (timer200msFlag) {
-  }
+
   if (1 == 2) {
   //if (timer99microsFlag) {58
   //if (timer200msFlag) {
@@ -256,16 +267,39 @@ void __not_in_flash_func(loop)() {
     // Serial.print((String) ",ADSR3_release:" +  (uint16_t)ADSR3_release + (String) "   ");
     // Serial.println();
 
-     for (int i = 0; i < 16; i++) {
+    //  for (int i = 0; i < 16; i++) {
 
-    // Serial.print((String) ", MuxAnalog" + (int)i + (String) " " + (uint16_t)muxAnalogData[i] + (String) "   ");
-       Serial.print((String) ", MUXAnalogFiltered" + (int)i + (String) ":" + /*(uint16_t)muxAnalogRaw[i]*/ (uint16_t)muxAnalogData[i] + (String) "   ");
-     }
+    // // Serial.print((String) ", MuxAnalog" + (int)i + (String) " " + (uint16_t)muxAnalogData[i] + (String) "   ");
+    //    Serial.print((String) ", MUXAnalogFiltered" + (int)i + (String) ":" + /*(uint16_t)muxAnalogRaw[i]*/ (uint16_t)muxAnalogData[i] + (String) "   ");
+    //  }
+     serialPrintJSON_for_PlotJuggler();
     //  for (int i = 0; i < 8; i++) {
     //    Serial.print((String)", -MuxFader" + (int)i + (String)": " + (uint16_t)faderMedian[i]);
     //  }
     // Serial.print(note[0]);
     //Serial.print(analogRead(PC0));
   }
-#endif
+  }
+}
+void serialPrintJSON_for_PlotJuggler() {
+Serial.print("{");
+
+for (int i = 0; i < 16; i++) {
+  // Print the JSON key with double quotes (e.g., "MUXAnalogFiltered0")
+  Serial.print("\"MUXAnalogFiltered");
+  Serial.print(i);
+  Serial.print("\":");
+  
+  // Print the value
+  Serial.print((uint16_t)muxAnalogData[i]);
+  
+  // Add a comma for all elements except the last one
+  if (i < 15) {
+    Serial.print(", ");
+  }
+}
+
+// End the JSON object and print a new line. 
+// The newline is VERY important for PlotJuggler to know the message is complete.
+Serial.println("}");
 }

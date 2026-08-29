@@ -4,12 +4,13 @@
 #include "sram_hot.h"
 
 #include "_build_libs/RoxMux_fela/src/RoxMux_fela.h"
-//#include <light_CD74HC4067.h>
 #include "_build_libs/MD_REncoder_fela/src/MD_REncoder_fela.h"
 #include "_build_libs/CD74HC4067/src/CD74HC4067.h"
 #include "Flow.h"
 #include "PresetSaveFlow.h"
 #include "CalibrationFlow.h" 
+#include "ModMatrixFlow.h"
+
 //#include "analogmuxdemux.h"
 
 // #define PIN_SAW1 42
@@ -171,10 +172,12 @@ byte funcKeyMode = 0;
 
 uint8_t presetSelectVal = 0;
 
+
 // The Global Flow Handlers
 Flow* activeFlow = nullptr;
 PresetSaveFlow presetSaveFlow;
-CalibrationFlow calibrationFlow; 
+CalibrationFlow calibrationFlow;
+ModMatrixFlow modMatrixFlow;  
 
 void enterFlow(Flow* flow) {
   if (activeFlow != nullptr) activeFlow->onExit();

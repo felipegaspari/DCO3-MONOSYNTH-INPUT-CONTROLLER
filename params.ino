@@ -60,7 +60,7 @@ static void apply_param_soft_sync(int16_t v)       { softSync = (uint8_t)v; }
 static void apply_param_sync_mode(int16_t v)       { syncMode = (uint8_t)v; }
 static void apply_param_subosc_divide(int16_t v)   { subOscDivide = (uint8_t)v; }
 static void apply_param_voice_mode(int16_t v)      { voiceMode = (byte)constrain(v, 0, 2); }
-static void apply_param_voice_alloc_mode(int16_t v){ voiceAllocMode = (byte)constrain(v, 0, 5); }
+static void apply_param_voice_alloc_mode(int16_t v){ voiceAllocMode = (byte)constrain(v, 0, 8); }
 static void apply_param_filter_mode(int16_t v)     { filterMode = (uint8_t)v; }
 
 // --- Drift, Velocity & Dynamics ---

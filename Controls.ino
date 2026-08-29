@@ -23,8 +23,13 @@ void init_controls() {
   pinMode(muxAnalog_PIN_SIG, INPUT);
 }
 
+void init_tables() {
+  for (int i = 0; i < LIN_TO_EXP_TABLE_SIZE; i++) {
+    linToExpLookup[i] = linearToExponential(i, 50, maxADSRControlValue);
+  }
+}
 // Core0 hot path: scan mux (analog on 1 ms) and encoders/buttons (~99 µs).
-void __not_in_flash_func(readControls)() {
+void SRAM_HOT(readControls)() {
 
   if (timer1msFlag) {
     read_digitalMux(1);
@@ -43,33 +48,37 @@ void __not_in_flash_func(readControls)() {
   }
 }
 
+
 // Core1 @1 ms: map filtered fader/pot ADC into locals when manual flags are set.
-void __not_in_flash_func(setControlValues)() {
+void SRAM_HOT(setControlValues)() {
+
+  static constexpr uint16_t dead_zone_low = 25;
+  static constexpr uint16_t dead_zone_high = 4085;
 
   if (faderRow1ControlManual) {
-    ADSR1_attack = map(constrain(muxAnalogData[fader1ArrayPos], 20, 4085), 20, 4085, 0, 4095);
-    ADSR1_decay = map(constrain(muxAnalogData[fader2ArrayPos], 20, 4085), 20, 4085, 0, 4095);
-    ADSR1_sustain = map(constrain(muxAnalogData[fader3ArrayPos], 20, 4085), 20, 4085, 0, 4095);
-    ADSR1_release = map(constrain(muxAnalogData[fader4ArrayPos], 20, 4085), 20, 4085, 0, 4095);
+    ADSR1_attack = map(constrain(muxAnalogData[fader1ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
+    ADSR1_decay = map(constrain(muxAnalogData[fader2ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
+    ADSR1_sustain = map(constrain(muxAnalogData[fader3ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
+    ADSR1_release = map(constrain(muxAnalogData[fader4ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
   }
 
   if (faderRow2ControlManual) {
     if (ADSR3Enabled) {
-      ADSR3_attack = map(constrain(muxAnalogData[fader5ArrayPos], 20, 4085), 20, 4085, 0, 4095);
-      ADSR3_decay = map(constrain(muxAnalogData[fader6ArrayPos], 20, 4085), 20, 4085, 0, 4095);
-      ADSR3_sustain = map(constrain(muxAnalogData[fader7ArrayPos], 20, 4085), 20, 4085, 0, 4095);
-      ADSR3_release = map(constrain(muxAnalogData[fader8ArrayPos], 20, 4085), 20, 4085, 0, 4095);
+      ADSR3_attack = map(constrain(muxAnalogData[fader5ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
+      ADSR3_decay = map(constrain(muxAnalogData[fader6ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
+      ADSR3_sustain = map(constrain(muxAnalogData[fader7ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
+      ADSR3_release = map(constrain(muxAnalogData[fader8ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
     } else {
-      ADSR2_attack = map(constrain(muxAnalogData[fader5ArrayPos], 20, 4085), 20, 4085, 0, 4095);
-      ADSR2_decay = map(constrain(muxAnalogData[fader6ArrayPos], 20, 4085), 20, 4085, 0, 4095);
-      ADSR2_sustain = map(constrain(muxAnalogData[fader7ArrayPos], 20, 4085), 20, 4085, 0, 4095);
-      ADSR2_release = map(constrain(muxAnalogData[fader8ArrayPos], 20, 4085), 20, 4085, 0, 4095);
+      ADSR2_attack = map(constrain(muxAnalogData[fader5ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
+      ADSR2_decay = map(constrain(muxAnalogData[fader6ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
+      ADSR2_sustain = map(constrain(muxAnalogData[fader7ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
+      ADSR2_release = map(constrain(muxAnalogData[fader8ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
     }
   }
 
   if (VCFPotsControlManual) {
-    CUTOFF = map(constrain( muxAnalogData[pot2ArrayPos], 20, 4085), 20, 4085, 4095, 0);
-    RESONANCE = map(constrain(muxAnalogData[pot3ArrayPos], 20, 4085), 20, 4085, 4095, 0);
+    CUTOFF = map(constrain( muxAnalogData[pot2ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 4095, 0);
+    RESONANCE = map(constrain(muxAnalogData[pot3ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 4095, 0);
     //    ADSR2toVCF = muxAnalogData[5];
     //    LFO1toVCF = muxAnalogData[1];
     ADSR2toVCF = constrain((507 - (muxAnalogData[pot4ArrayPos] / 8)), 0, 512);
@@ -81,7 +90,7 @@ void __not_in_flash_func(setControlValues)() {
     ADSR1toVCA = 512 - (muxAnalogData[pot5ArrayPos] / 8);
   }
   if (PWMPotsControlManual) {
-    PW = map(constrain(muxAnalogData[pot6ArrayPos], 20, 4085), 20, 4085, 0, 4095);
+    PW = map(constrain(muxAnalogData[pot6ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
   }
 
   // if (RESONANCEAmpCompensation) {
@@ -96,7 +105,7 @@ void __not_in_flash_func(setControlValues)() {
 }
 
 // Apply dual Kalman filters to muxAnalogRaw[] → muxAnalogData[].
-void __not_in_flash_func(read_AnalogMux)() {
+void SRAM_HOT(read_AnalogMux)() {
 
   for (uint8_t i = 0; i < 16; i++) {
 
@@ -119,7 +128,7 @@ muxAnalogData[i] = simpleKalmanFilter[i+16].updateEstimate(simpleKalmanFilter[i]
 }
 
 // Scan 16 mux channels into valorMUX1[48]; optionally sample analog on each channel.
-void __not_in_flash_func(read_digitalMux)(bool readPots) {
+void SRAM_HOT(read_digitalMux)(bool readPots) {
 
   for (activeDigitalMuxChannel = 0; activeDigitalMuxChannel < 16; activeDigitalMuxChannel++) {
 
@@ -139,13 +148,13 @@ void __not_in_flash_func(read_digitalMux)(bool readPots) {
 }
 
 // Cubic-ish fader curve helper (also used from Controls).
-uint16_t faderExpConverter(uint16_t readingValue) {
+uint16_t SRAM_HOT(faderExpConverter)(uint16_t readingValue) {
   uint16_t pow3Calc = readingValue / 4;
   uint16_t expValOut = pow3Calc * pow3Calc * pow3Calc / 20000;
   return expValOut;
 }
 
-float expConverterFloat(uint16_t readingValue, uint16_t curve) {
+float SRAM_HOT(expConverterFloat)(uint16_t readingValue, uint16_t curve) {
   uint16_t pow3Calc = readingValue;
   float expValOut = (float)pow3Calc * pow3Calc / curve;
   if (expValOut < 0.005) {
@@ -154,7 +163,7 @@ float expConverterFloat(uint16_t readingValue, uint16_t curve) {
   return expValOut;
 }
 
-uint16_t expConverter(uint16_t readingValue, uint16_t curve) {
+uint16_t SRAM_HOT(expConverter)(uint16_t readingValue, uint16_t curve) {
   uint16_t pow3Calc = readingValue;
   uint16_t expValOut = (float)pow3Calc * pow3Calc / curve;
   if (expValOut < 0.1) {
@@ -163,12 +172,12 @@ uint16_t expConverter(uint16_t readingValue, uint16_t curve) {
   return expValOut;
 }
 
-uint16_t expConverterReverse(uint16_t readingValue, uint16_t curve) {
+uint16_t SRAM_HOT(expConverterReverse)(uint16_t readingValue, uint16_t curve) {
   uint16_t expValOut = sqrt((float)readingValue / curve);
   return expValOut;
 }
 
-uint16_t expConverterFloatReverse(float readingValue, uint16_t curve) {
+uint16_t SRAM_HOT(expConverterFloatReverse)(float readingValue, uint16_t curve) {
   uint16_t expValOut = sqrt(readingValue / curve);
   return expValOut;
 }

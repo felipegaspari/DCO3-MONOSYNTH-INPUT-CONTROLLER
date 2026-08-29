@@ -18,6 +18,7 @@
 //    execute_button_action() (buttons.ino); announceParam/stateValue tell the
 //    scroll announce what to show.
 
+#include "encoders.h"
 struct MenuItem {
   EncoderAction encAction;  // ACTION_NONE for toggle items
   ButtonAction btnAction;   // BTN_ACTION_NONE for value items
@@ -152,11 +153,17 @@ MenuItem dcoModMenuArray[] = {
 MenuDef dcoModMenu = { dcoModMenuArray, 9 };
 #endif
 
-// --- Mode 8: MOD MATRIX MENU (Stub) ---
-MenuItem modMatrixMenuArray[] = {
-  { ACTION_NONE, BTN_ACTION_NONE, ParamId::PARAM_SINE_STATUS, nullptr }
+MenuItem lfoMenuArray[] = {
+  { ACTION_LFO1_WAVEFORM, BTN_ACTION_NONE, ParamId::PARAM_LFO1_WAVEFORM, nullptr },
+  { ACTION_LFO1_speed, BTN_ACTION_NONE, ParamId::PARAM_LFO1_SPEED, nullptr },
+  { ACTION_LFO1_to_OSC1, BTN_ACTION_NONE, ParamId::PARAM_LFO1_TO_OSC1, nullptr },
+  { ACTION_LFO1_to_OSC2, BTN_ACTION_NONE, ParamId::PARAM_LFO1_TO_OSC2, nullptr },
+  { ACTION_LFO2_WAVEFORM, BTN_ACTION_NONE, ParamId::PARAM_LFO2_WAVEFORM, nullptr },
+  { ACTION_LFO2_speed, BTN_ACTION_NONE, ParamId::PARAM_LFO2_SPEED, nullptr },
+  { ACTION_LFO2_to_OSC2, BTN_ACTION_NONE, ParamId::PARAM_LFO2_TO_OSC2, nullptr },
+  { ACTION_LFO2_to_OSC2_coarse, BTN_ACTION_NONE, ParamId::PARAM_LFO2_TO_OSC2_COARSE, nullptr }
 };
-MenuDef modMatrixMenu = { modMatrixMenuArray, 1 };
+MenuDef lfoMenu = { lfoMenuArray, 8 };
 
 // --- Placeholder Menu ---
 MenuItem placeholderMenuArray[] = {

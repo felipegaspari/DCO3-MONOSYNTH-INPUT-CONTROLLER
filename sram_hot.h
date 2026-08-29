@@ -1,6 +1,7 @@
 #ifndef __SRAM_HOT_H__
 #define __SRAM_HOT_H__
 
+#include "_shared/memory_port.h"
 // RP2040: Pico SDK / Arduino-Pico already define __not_in_flash_func.
 // Fallback keeps non-Pico hosts (linter, AVR) compiling.
 #ifndef __not_in_flash_func
@@ -11,6 +12,12 @@
 #define INPUT_ALWAYS_INLINE __attribute__((always_inline))
 #endif
 
+#ifndef SRAM_HOT_ENABLE
+#define SRAM_HOT_ENABLE 0
+#endif
+#ifndef SRAM_DATA_ENABLE
+#define SRAM_DATA_ENABLE 1
+#endif
 #ifndef ROXMUX_FELA_SRAM_HOT
 #define ROXMUX_FELA_SRAM_HOT 1
 #endif

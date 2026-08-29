@@ -92,7 +92,7 @@ static void exit_manual_calibration(controlMode returnTo) {
 // Mode-specific EXIT/BACK/SELECT/CONFIRM handling. Consumes the action (returns
 // BTN_ACTION_NONE) or maps it to a follow-up for execute_button_action().
 static ButtonAction
-__not_in_flash_func(handle_mode_buttons)(ButtonAction action) {
+SRAM_HOT(handle_mode_buttons)(ButtonAction action) {
   switch (currentControlMode) {
 
   case CALIBRATION_MENU:
@@ -147,7 +147,7 @@ __not_in_flash_func(handle_mode_buttons)(ButtonAction action) {
 }
 
 // Execute one resolved ButtonAction (mode transitions already handled).
-static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
+static void SRAM_HOT(execute_button_action)(ButtonAction action) {
   switch (action) {
 
   // The five wave keys differ only in which oscillator they toggle, which
@@ -241,7 +241,7 @@ static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
   case TG_LFO1_WAVE:
     if (buttonActionIsSelected) {
       LFO1Waveform++;
-      if (LFO1Waveform > 9) {
+      if (LFO1Waveform > 12) {
         LFO1Waveform = 1;
       }
     }
@@ -251,7 +251,7 @@ static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
   case TG_LFO2_WAVE:
     if (buttonActionIsSelected) {
       LFO2Waveform++;
-      if (LFO2Waveform > 9) {
+      if (LFO2Waveform > 12) {
         LFO2Waveform = 1;
       }
     }
@@ -278,7 +278,7 @@ static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
   case TG_VOICE_ALLOC_MODE:
     if (buttonActionIsSelected) {
       voiceAllocMode++;
-      if (voiceAllocMode > 5)
+      if (voiceAllocMode > 8)
         voiceAllocMode = 0;
     }
     serial_send_param_change_byte(ParamId::PARAM_VOICE_ALLOC_MODE,
@@ -454,14 +454,8 @@ static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
     menu_announce_item(menuPos);
     break;
 
-  case TG_MOD_MATRIX_MENU:
-    currentMenu = &modMatrixMenu;
-    menuPos = 0;
-    menuPosMax = currentMenu->count - 1;
-    currentControlMode = MENU_NAVIGATION;
-    serial_send_param_change_byte(ParamId::PARAM_UI_MENU_MODE, 8); // Mode 8
-    serial_send_param_change_byte(ParamId::PARAM_UI_MENU_POSITION, (uint8_t)menuPos);
-    menu_announce_item(menuPos);
+    case TG_MOD_MATRIX_MENU:
+    enterFlow(&modMatrixFlow); 
     break;
 
   case TG_PLACEHOLDER_MENU:
@@ -498,7 +492,7 @@ static void __not_in_flash_func(execute_button_action)(ButtonAction action) {
   }
 }
 
-void __not_in_flash_func(read_encoder_buttons)() {
+void SRAM_HOT(read_encoder_buttons)() {
 
   if ((millis() - buttonActionSelectedMillis) > buttonActionSelectedTimeout) {
     buttonActionSelected = BTN_ACTION_NONE;
@@ -574,7 +568,7 @@ void __not_in_flash_func(read_encoder_buttons)() {
 }
 
 // Latched-button bookkeeping for button index i (wave keys only).
-void __not_in_flash_func(handleLatchedButton)(int i) {
+void SRAM_HOT(handleLatchedButton)(int i) {
   if (i <= LATCHABLE_BUTTON_MAX) {
     buttonIsLatched[i] = true;
     update_LED_Control(i, true);
@@ -582,7 +576,7 @@ void __not_in_flash_func(handleLatchedButton)(int i) {
   }
 }
 
-ButtonAction __not_in_flash_func(handleHeldButton)(int i) {
+ButtonAction SRAM_HOT(handleHeldButton)(int i) {
   ButtonStruct &button = buttons[i];
   if (funcKeyMode == 2)
     return button.actionHeldAlt2;
@@ -591,7 +585,7 @@ ButtonAction __not_in_flash_func(handleHeldButton)(int i) {
   return button.actionHeld;
 }
 
-ButtonAction __not_in_flash_func(handlePressedButton)(int i) {
+ButtonAction SRAM_HOT(handlePressedButton)(int i) {
   ButtonStruct &button = buttons[i];
   if (funcKeyMode == 2)
     return button.actionPressedAlt2;
@@ -600,7 +594,7 @@ ButtonAction __not_in_flash_func(handlePressedButton)(int i) {
   return button.actionPressed;
 }
 
-ButtonAction __not_in_flash_func(handleReleasedButton)(int i) {
+ButtonAction SRAM_HOT(handleReleasedButton)(int i) {
   ButtonStruct &button = buttons[i];
   if (i <= LATCHABLE_BUTTON_MAX) {
     buttonIsLatched[i] = false;
@@ -615,12 +609,12 @@ ButtonAction __not_in_flash_func(handleReleasedButton)(int i) {
 }
 
 // Resolve double-press action for button index i.
-ButtonAction __not_in_flash_func(handleDoublePressedButton)(int i) {
+ButtonAction SRAM_HOT(handleDoublePressedButton)(int i) {
   return buttons[i].actionDouble;
 }
 
 // Unlatch bookkeeping for button index i (wave keys only).
-void __not_in_flash_func(handleUnlatchedButton)(int i) {
+void SRAM_HOT(handleUnlatchedButton)(int i) {
   if (i <= LATCHABLE_BUTTON_MAX) {
     buttonIsLatched[i] = false;
     set_LED_Status(LED_REFRESH_ALL, 0);

@@ -8,10 +8,10 @@ extern byte presetDir[PRESET_NUM_SLOTS][PRESET_NAME_LEN];
 extern byte presetNameVal[PRESET_NAME_LEN];
 extern byte presetName[PRESET_NAME_LEN + 1] = { 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 0 };; // +1 for null termination if needed
 
-byte noteStart[NUM_VOICES];
-byte noteEnd[NUM_VOICES];
-byte velocity[NUM_VOICES];
-byte note[NUM_VOICES];
+SRAM_DATA byte noteStart[NUM_VOICES];
+SRAM_DATA byte noteEnd[NUM_VOICES];
+SRAM_DATA byte velocity[NUM_VOICES];
+SRAM_DATA byte note[NUM_VOICES];
 
 byte voiceMode = INPUT_DEFAULT_VOICE_MODE;
 // Mirror only: allocation happens on the DCO. Kept so the panel cache and a

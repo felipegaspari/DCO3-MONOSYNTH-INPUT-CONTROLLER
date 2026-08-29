@@ -84,7 +84,7 @@ static EncoderParamBinding encoderParamBindings[] = {
     {ACTION_ADSR3_DECAY_CURVE, &ADSR3DecayCurveVal, ENC_VAL_I8, 0, 7, 1, 0, ParamId::PARAM_ADSR3_DECAY_CURVE, 0},
     {ACTION_ADSR3_RELEASE_CURVE, &ADSR3ReleaseCurveVal, ENC_VAL_I8, 0, 7, 1, 0, ParamId::PARAM_ADSR3_RELEASE_CURVE, 0},
     {ACTION_VOICE_MODE, &voiceMode, ENC_VAL_I8, 0, 2, 1, 0, ParamId::PARAM_VOICE_MODE, 0},
-    {ACTION_VOICE_ALLOC_MODE, &voiceAllocMode, ENC_VAL_I8, 0, 5, 1, 0, ParamId::PARAM_VOICE_ALLOC_MODE, 0},
+    {ACTION_VOICE_ALLOC_MODE, &voiceAllocMode, ENC_VAL_I8, 0, 8, 1, 0, ParamId::PARAM_VOICE_ALLOC_MODE, 0},
     {ACTION_SYNC_MODE, &syncMode, ENC_VAL_I8, 0, 2, 1, 0, ParamId::PARAM_SYNC_MODE, 0},
     {ACTION_SOFT_SYNC, &softSync, ENC_VAL_I8, 0, 3, 1, 0, ParamId::PARAM_SOFT_SYNC, 0},
     {ACTION_PORTAMENTO_MODE, &portamentoMode, ENC_VAL_I8, 0, 1, 1, 0, ParamId::PARAM_PORTAMENTO_MODE, 0},
@@ -96,6 +96,8 @@ static EncoderParamBinding encoderParamBindings[] = {
     {ACTION_ADSR2_RESTART, (void*)&ADSR2Restart, ENC_VAL_I8, 0, 1, 1, 0, ParamId::PARAM_ADSR2_RESTART, 0},
     {ACTION_ADSR3_RESTART, (void*)&ADSR3Restart, ENC_VAL_I8, 0, 1, 1, 0, ParamId::PARAM_ADSR3_RESTART, 0},
     {ACTION_ADSR3_to_OSC_SELECT, &ADSR3ToOscSelect, ENC_VAL_I8, 0, INPUT_ADSR3_TO_OSC_SELECT_MAX, 1, 0, ParamId::PARAM_ADSR3_TO_OSC_SELECT, 0},
+    {ACTION_LFO1_WAVEFORM, &LFO1Waveform, ENC_VAL_I8, 0, 12, 1, 0, ParamId::PARAM_LFO1_WAVEFORM, 0},
+    {ACTION_LFO2_WAVEFORM, &LFO2Waveform, ENC_VAL_I8, 0, 12, 1, 0, ParamId::PARAM_LFO2_WAVEFORM, 0},
 };
 
 static constexpr uint8_t NUM_ENCODER_BINDINGS =
@@ -112,7 +114,7 @@ static inline int32_t encoder_binding_read(const EncoderParamBinding &b) {
   }
 }
 
-static inline void encoder_binding_write(const EncoderParamBinding &b,
+static void SRAM_HOT(encoder_binding_write)(const EncoderParamBinding &b,
                                          int32_t v) {
   switch (b.type) {
   case ENC_VAL_I8:
@@ -128,7 +130,7 @@ static inline void encoder_binding_write(const EncoderParamBinding &b,
 }
 
 // Run the table-bound handler for action.
-static bool __not_in_flash_func(encoder_apply_binding)(EncoderAction action,
+static bool SRAM_HOT(encoder_apply_binding)(EncoderAction action,
                                                        uint8_t direction,
                                                        uint16_t speed) {
   for (uint8_t n = 0; n < NUM_ENCODER_BINDINGS; n++) {
@@ -157,7 +159,7 @@ static bool __not_in_flash_func(encoder_apply_binding)(EncoderAction action,
   return false;
 }
 
-static EncoderAction __not_in_flash_func(resolve_encoder_action)(const EncoderStruct& encoder, int i) {
+static EncoderAction SRAM_HOT(resolve_encoder_action)(const EncoderStruct& encoder, int i) {
   switch (currentControlMode) {
     case NORMAL: {
       EncoderAction action;
@@ -187,7 +189,7 @@ static EncoderAction __not_in_flash_func(resolve_encoder_action)(const EncoderSt
 }
 // Core0 ~99 µs: read all encoders and dispatch EncoderAction (ParamId / UI /
 // cal).
-void __not_in_flash_func(read_encoders)() {
+void SRAM_HOT(read_encoders)() {
 
   if ((millis() - encoderActionSelectedMillis) > encoderActionSelectedTimeout) {
     encoderActionSelected = ACTION_NONE;
@@ -259,7 +261,7 @@ void __not_in_flash_func(read_encoders)() {
   }
 }
 
-void __not_in_flash_func(menu_announce_item)(int8_t pos) {
+void SRAM_HOT(menu_announce_item)(int8_t pos) {
   if (!currentMenu)
     return;
   const MenuItem &item = currentMenu->items[pos];
