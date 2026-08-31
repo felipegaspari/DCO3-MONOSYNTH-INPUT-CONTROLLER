@@ -21,47 +21,36 @@ static void toggle_wave_key(uint8_t key) {
 // tabs. calibrationFlag picks the stage on the DCO (PARAM_CALIBRATION_FLAG);
 // followUp instead re-dispatches a button action (e.g. enter manual cal).
 // =============================================================================
-// CALIBRATION MENU ACTIONS & HANDLERS
+// CALIBRATION MENU ACTIONS & HANDLERS (Order matches Screen Mode 10)
 // =============================================================================
 
-// Option 0: Auto Calibration (Amp-Comp Tables)
-static void cal_action_auto_amp_comp() {
-  // Tell the DCO to run the automated amplitude compensation routine
-  serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 9,
-                                /*sendToAll=*/true);
-
-  // (Optional) Send a UI signal or toast to the Screen if needed
-  // serial_send_signal(SIGNAL_CALIBRATION_RUNNING);
+// Pos 0: Fast Amplitude Compensation Routine
+static void cal_action_fast_amp_comp() {
+  serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 9, /*sendToAll=*/true);
 }
 
-// Option 1: Pulse Width (PW) Calibration
-static void cal_action_pw_calibration() {
-  // Tell the DCO to run PW center & limit calibration
-  serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 2,
-                                /*sendToAll=*/true);
-
-  // (Optional) Send any custom PW test parameters here
+// Pos 1: Normal Auto Amplitude Compensation Routine
+static void cal_action_normal_amp_comp() {
+  serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 1, /*sendToAll=*/true);
 }
 
-// Option 2: Full Calibration Routine (PW + Amp-Comp)
-static void cal_action_full_routine() {
-  // Tell the DCO to run the full calibration sequence
-  serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 3,
-                                /*sendToAll=*/true);
-}
-
-// Option 3: Refine Amp-Comp Tables
+// Pos 2: Refine Amp-Comp Tables
 static void cal_action_refine_amp_comp() {
-  // Tell the DCO to run the refine amplitude compensation routine
-  serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 5,
-                                /*sendToAll=*/true);
+  serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 5, /*sendToAll=*/true);
 }
 
-// Option 4: Manual Calibration Flow
-// Option 3: Manual Calibration Flow
+// Pos 3: Pulse Width (PW) Calibration
+static void cal_action_pw_calibration() {
+  serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 2, /*sendToAll=*/true);
+}
+
+// Pos 4: Full Calibration Routine (PW + Amp-Comp)
+static void cal_action_full_routine() {
+  serial_send_param_change_byte(ParamId::PARAM_CALIBRATION_FLAG, 3, /*sendToAll=*/true);
+}
+
+// Pos 5: Manual Calibration Flow
 static void cal_action_manual_flow() {
-  // Launch the flow directly! (The Flow manages the screen and mode
-  // transitions)
   enterFlow(&calibrationFlow);
 }
 
@@ -71,12 +60,14 @@ struct CalibrationMenuOption {
 };
 
 static const CalibrationMenuOption calibrationMenu[] = {
-    {cal_action_auto_amp_comp},   // Pos 0
-    {cal_action_pw_calibration},  // Pos 1
-    {cal_action_full_routine},    // Pos 2
-    {cal_action_manual_flow},     // Pos 3
-    {cal_action_refine_amp_comp}, // Pos 4
+  {cal_action_fast_amp_comp},   // Pos 0
+  {cal_action_normal_amp_comp}, // Pos 1
+  {cal_action_refine_amp_comp}, // Pos 2
+  {cal_action_pw_calibration},  // Pos 3
+  {cal_action_full_routine},    // Pos 4
+  {cal_action_manual_flow},     // Pos 5
 };
+
 
 static constexpr int8_t CALIBRATION_MENU_POS_MAX =
     (int8_t)(sizeof(calibrationMenu) / sizeof(calibrationMenu[0]) - 1);
@@ -121,9 +112,7 @@ SRAM_HOT(handle_mode_buttons)(ButtonAction action) {
     switch (action) {
     case EXIT:
     case BACK:
-      currentControlMode = NORMAL;
-      currentMenu = nullptr;
-      serial_send_param_change_byte(ParamId::PARAM_UI_MENU_MODE, 0);
+    exit_generic_menu();
       return BTN_ACTION_NONE;
     case SELECT:
     case CONFIRM:
@@ -198,10 +187,8 @@ static void SRAM_HOT(execute_button_action)(ButtonAction action) {
     break;
 
   case TG_ENABLE_ADSR3:
-    if (buttonActionIsSelected || currentControlMode == MENU_NAVIGATION) {
       ADSR3Enabled = !ADSR3Enabled;
       faderRow2ControlManual = false;
-    }
     serial_send_param_change_byte(ParamId::PARAM_ADSR3_ENABLED, (uint8_t)ADSR3Enabled);
     LED_Control_Mux.blinkPin(LEDPins[11], ADSR3Enabled);
     set_LED_Status(11, ADSR3Enabled);
@@ -374,7 +361,17 @@ static void SRAM_HOT(execute_button_action)(ButtonAction action) {
     serial_send_param_change_byte(ParamId::PARAM_SYNC_MODE, syncMode);
     break;
 
-  case TG_CALIBRATION_MENU:
+  case TG_MAN_CALIBRATION:
+    // Launch the new Flow!
+    enterFlow(&calibrationFlow);
+    break;
+
+    case TG_CALIBRATION_MENU:
+    if (currentControlMode == CALIBRATION_MENU) {
+      currentControlMode = NORMAL;
+      serial_send_param_change_byte(ParamId::PARAM_UI_CALIBRATION_DISMISS, 0);
+      break;
+    }
     menuPos = 0;
     menuPosMax = CALIBRATION_MENU_POS_MAX;
     currentControlMode = CALIBRATION_MENU;
@@ -383,12 +380,11 @@ static void SRAM_HOT(execute_button_action)(ButtonAction action) {
                                   (uint8_t)menuPos);
     break;
 
-  case TG_MAN_CALIBRATION:
-    // Launch the new Flow!
-    enterFlow(&calibrationFlow);
-    break;
-
   case TG_ENVELOPE_MENU:
+    if (currentControlMode == MENU_NAVIGATION && currentMenu == &envelopeMenu) {
+      exit_generic_menu();
+      break;
+    }
     currentMenu = &envelopeMenu;
     menuPos = 0;
     menuPosMax = currentMenu->count - 1;
@@ -400,6 +396,10 @@ static void SRAM_HOT(execute_button_action)(ButtonAction action) {
     break;
 
   case TG_ADSR1_MENU:
+    if (currentControlMode == MENU_NAVIGATION && currentMenu == &adsr1Menu) {
+      exit_generic_menu();
+      break;
+    }
     currentMenu = &adsr1Menu;
     menuPos = 0;
     menuPosMax = currentMenu->count - 1;
@@ -412,6 +412,10 @@ static void SRAM_HOT(execute_button_action)(ButtonAction action) {
     break;
 
   case TG_ADSR2_MENU:
+    if (currentControlMode == MENU_NAVIGATION && currentMenu == &adsr2Menu) {
+      exit_generic_menu();
+      break;
+    }
     currentMenu = &adsr2Menu;
     menuPos = 0;
     menuPosMax = currentMenu->count - 1;
@@ -424,6 +428,10 @@ static void SRAM_HOT(execute_button_action)(ButtonAction action) {
     break;
 
   case TG_ADSR3_MENU:
+    if (currentControlMode == MENU_NAVIGATION && currentMenu == &adsr3Menu) {
+      exit_generic_menu();
+      break;
+    }
     currentMenu = &adsr3Menu;
     menuPos = 0;
     menuPosMax = currentMenu->count - 1;
@@ -434,7 +442,12 @@ static void SRAM_HOT(execute_button_action)(ButtonAction action) {
                                   (uint8_t)menuPos);
     menu_announce_item(menuPos);
     break;
-    case TG_DCO_MENU:
+
+  case TG_DCO_MENU:
+    if (currentControlMode == MENU_NAVIGATION && currentMenu == &dcoMenu) {
+      exit_generic_menu();
+      break;
+    }
     currentMenu = &dcoMenu;
     menuPos = 0;
     menuPosMax = currentMenu->count - 1;
@@ -444,7 +457,15 @@ static void SRAM_HOT(execute_button_action)(ButtonAction action) {
     menu_announce_item(menuPos);
     break;
 
+    case TG_MOD_MATRIX_MENU:
+    enterFlow(&modMatrixFlow); 
+    break;
+
   case TG_DCO_MOD_MENU:
+    if (currentControlMode == MENU_NAVIGATION && currentMenu == &dcoModMenu) {
+      exit_generic_menu();
+      break;
+    }
     currentMenu = &dcoModMenu;
     menuPos = 0;
     menuPosMax = currentMenu->count - 1;
@@ -454,11 +475,25 @@ static void SRAM_HOT(execute_button_action)(ButtonAction action) {
     menu_announce_item(menuPos);
     break;
 
-    case TG_MOD_MATRIX_MENU:
-    enterFlow(&modMatrixFlow); 
+    case TG_LFO_MENU:
+    if (currentControlMode == MENU_NAVIGATION && currentMenu == &lfoMenu) {
+      exit_generic_menu();
+      break;
+    }
+    currentMenu = &lfoMenu;
+    menuPos = 0;
+    menuPosMax = currentMenu->count - 1;
+    currentControlMode = MENU_NAVIGATION;
+    serial_send_param_change_byte(ParamId::PARAM_UI_MENU_MODE, 9); // Mode 9 = LFO Menu
+    serial_send_param_change_byte(ParamId::PARAM_UI_MENU_POSITION, (uint8_t)menuPos);
+    menu_announce_item(menuPos);
     break;
 
   case TG_PLACEHOLDER_MENU:
+    if (currentControlMode == MENU_NAVIGATION && currentMenu == &placeholderMenu) {
+      exit_generic_menu();
+      break;
+    }
     currentMenu = &placeholderMenu;
     menuPos = 0;
     menuPosMax = currentMenu->count - 1;
@@ -565,6 +600,12 @@ void SRAM_HOT(read_encoder_buttons)() {
       execute_button_action(action);
     }
   }
+}
+
+static void exit_generic_menu() {
+  currentControlMode = NORMAL;
+  currentMenu = nullptr;
+  serial_send_param_change_byte(ParamId::PARAM_UI_MENU_MODE, 0);
 }
 
 // Latched-button bookkeeping for button index i (wave keys only).

@@ -49,59 +49,69 @@ void SRAM_HOT(readControls)() {
 }
 
 
+/**
+ * @brief Maps raw ADC reading with explicit low and high deadzones.
+ */
+ static inline int16_t SRAM_HOT(mapWithDeadzone)(int32_t val, int32_t dz_low, int32_t dz_high, int32_t out_min, int32_t out_max) {
+  int32_t clamped = constrain(val, dz_low, dz_high);
+  return (int16_t)map(clamped, dz_low, dz_high, out_min, out_max);
+}
+
+
 // Core1 @1 ms: map filtered fader/pot ADC into locals when manual flags are set.
 void SRAM_HOT(setControlValues)() {
 
-  static constexpr uint16_t dead_zone_low = 25;
-  static constexpr uint16_t dead_zone_high = 4085;
-
-  if (faderRow1ControlManual) {
-    ADSR1_attack = map(constrain(muxAnalogData[fader1ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
-    ADSR1_decay = map(constrain(muxAnalogData[fader2ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
-    ADSR1_sustain = map(constrain(muxAnalogData[fader3ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
-    ADSR1_release = map(constrain(muxAnalogData[fader4ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
-  }
-
-  if (faderRow2ControlManual) {
-    if (ADSR3Enabled) {
-      ADSR3_attack = map(constrain(muxAnalogData[fader5ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
-      ADSR3_decay = map(constrain(muxAnalogData[fader6ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
-      ADSR3_sustain = map(constrain(muxAnalogData[fader7ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
-      ADSR3_release = map(constrain(muxAnalogData[fader8ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
-    } else {
-      ADSR2_attack = map(constrain(muxAnalogData[fader5ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
-      ADSR2_decay = map(constrain(muxAnalogData[fader6ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
-      ADSR2_sustain = map(constrain(muxAnalogData[fader7ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
-      ADSR2_release = map(constrain(muxAnalogData[fader8ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
+    // Deadzones for 12-bit / 4095 controls (Faders, Cutoff, Resonance, PW)
+    static constexpr uint16_t dead_zone_low       = 25;
+    static constexpr uint16_t dead_zone_high      = 4085;
+  
+    // Dedicated Deadzones for 512-max pots (ADSR2->VCF, LFO2->VCF, ADSR1->VCA)
+    static constexpr uint16_t dead_zone_512_low   = 40;   // (512 - 507) * 8 = 40
+    static constexpr uint16_t dead_zone_512_high  = 4056; // 507 * 8 = 4056
+  
+    // 1. Fader Row 1: ADSR 1 (0..4095)
+    if (faderRow1ControlManual) {
+      ADSR1_attack  = mapWithDeadzone(muxAnalogData[fader1ArrayPos], dead_zone_low, dead_zone_high, 0, 4095);
+      ADSR1_decay   = mapWithDeadzone(muxAnalogData[fader2ArrayPos], dead_zone_low, dead_zone_high, 0, 4095);
+      ADSR1_sustain = mapWithDeadzone(muxAnalogData[fader3ArrayPos], dead_zone_low, dead_zone_high, 0, 4095);
+      ADSR1_release = mapWithDeadzone(muxAnalogData[fader4ArrayPos], dead_zone_low, dead_zone_high, 0, 4095);
     }
-  }
-
-  if (VCFPotsControlManual) {
-    CUTOFF = map(constrain( muxAnalogData[pot2ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 4095, 0);
-    RESONANCE = map(constrain(muxAnalogData[pot3ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 4095, 0);
-    //    ADSR2toVCF = muxAnalogData[5];
-    //    LFO1toVCF = muxAnalogData[1];
-    ADSR2toVCF = constrain((507 - (muxAnalogData[pot4ArrayPos] / 8)), 0, 512);
-    LFO2toVCF = constrain((507 - (muxAnalogData[pot1ArrayPos] / 8)), 0, 512);
-  }
-  // if (VCAPotsControlManual) {
-  if (VCAPotsControlManual) {
-    //ADSR1toVCA = constrain((507 - (muxAnalogData[6]/ 8)), 0, 4095);
-    ADSR1toVCA = 512 - (muxAnalogData[pot5ArrayPos] / 8);
-  }
-  if (PWMPotsControlManual) {
-    PW = map(constrain(muxAnalogData[pot6ArrayPos], dead_zone_low, dead_zone_high), dead_zone_low, dead_zone_high, 0, 4095);
-  }
-
-  // if (RESONANCEAmpCompensation) {
-  //   if (RESONANCE <= 2100) {
-  //     VCAResonanceCompensation = (float)RESONANCE / 2100 * 2.25;
-  //   } else if (RESONANCE <= 3720) {
-  //     VCAResonanceCompensation = ((float)constrain((3720 - RESONANCE), 0, 1200) / 960) + 1;
-  //   } else {
-  //     VCAResonanceCompensation = 1;
-  //   }
-  // }
+  
+    // 2. Fader Row 2: ADSR 3 (if active) or ADSR 2 (0..4095)
+    if (faderRow2ControlManual) {
+      if (ADSR3Enabled) {
+        ADSR3_attack  = mapWithDeadzone(muxAnalogData[fader5ArrayPos], dead_zone_low, dead_zone_high, 0, 4095);
+        ADSR3_decay   = mapWithDeadzone(muxAnalogData[fader6ArrayPos], dead_zone_low, dead_zone_high, 0, 4095);
+        ADSR3_sustain = mapWithDeadzone(muxAnalogData[fader7ArrayPos], dead_zone_low, dead_zone_high, 0, 4095);
+        ADSR3_release = mapWithDeadzone(muxAnalogData[fader8ArrayPos], dead_zone_low, dead_zone_high, 0, 4095);
+      } else {
+        ADSR2_attack  = mapWithDeadzone(muxAnalogData[fader5ArrayPos], dead_zone_low, dead_zone_high, 0, 4095);
+        ADSR2_decay   = mapWithDeadzone(muxAnalogData[fader6ArrayPos], dead_zone_low, dead_zone_high, 0, 4095);
+        ADSR2_sustain = mapWithDeadzone(muxAnalogData[fader7ArrayPos], dead_zone_low, dead_zone_high, 0, 4095);
+        ADSR2_release = mapWithDeadzone(muxAnalogData[fader8ArrayPos], dead_zone_low, dead_zone_high, 0, 4095);
+      }
+    }
+  
+    // 3. VCF Pots
+    if (VCFPotsControlManual) {
+      CUTOFF     = mapWithDeadzone(muxAnalogData[pot2ArrayPos], dead_zone_low, dead_zone_high, 4095, 0);
+      RESONANCE  = mapWithDeadzone(muxAnalogData[pot3ArrayPos], dead_zone_low, dead_zone_high, 4095, 0);
+      
+      // Uses 512 deadzone profile (40 .. 4056 -> 512 .. 0)
+      ADSR2toVCF = mapWithDeadzone(muxAnalogData[pot4ArrayPos], dead_zone_512_low, dead_zone_512_high, 512, 0);
+      LFO2toVCF  = mapWithDeadzone(muxAnalogData[pot1ArrayPos], dead_zone_512_low, dead_zone_512_high, 512, 0);
+    }
+  
+    // 4. VCA Pots
+    if (VCAPotsControlManual) {
+      // Uses 512 deadzone profile (40 .. 4056 -> 512 .. 0)
+      ADSR1toVCA = mapWithDeadzone(muxAnalogData[pot5ArrayPos], dead_zone_512_low, dead_zone_512_high, 512, 0);
+    }
+  
+    // 5. PWM Pots
+    if (PWMPotsControlManual) {
+      PW = mapWithDeadzone(muxAnalogData[pot6ArrayPos], dead_zone_low, dead_zone_high, 0, 4095);
+    }
 }
 
 // Apply dual Kalman filters to muxAnalogRaw[] → muxAnalogData[].
@@ -111,19 +121,6 @@ void SRAM_HOT(read_AnalogMux)() {
 
 muxAnalogData[i] = simpleKalmanFilter[i+16].updateEstimate(simpleKalmanFilter[i].updateEstimate(muxAnalogRaw[i]));
 
-    // muxAnalog.channel(i);
-    // delayMicroseconds(2);
-    // muxAnalogRaw[i] = analogRead(muxAnalog_PIN_SIG);
-
-    // if (muxAnalogRaw[i] > (((muxAnalogDataPrev[i] + analogMedian[i]) / 2) + 10)) {
-    //   muxAnalogData[i] = (muxAnalogRaw[i] + analogMedian[i] + muxAnalogDataPrev[i] - 8) / 3;
-    // } else if (muxAnalogRaw[i] < (((muxAnalogDataPrev[i] + analogMedian[i]) / 2) - 10)) {
-    //   muxAnalogData[i] = (muxAnalogRaw[i] + analogMedian[i] + muxAnalogDataPrev[i] + 8) / 3;
-    // }
-
-    // // muxAnalogDataPrev[i] = analogMedian[i];
-    // // muxAnalogDataPrev[i] = (muxAnalogRaw[i] + analogMedian[i]) / 2;
-    // muxAnalogDataPrev[i] = (muxAnalogData[i] + analogMedian[i]) / 2;
   }
 }
 
